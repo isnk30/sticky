@@ -32,45 +32,6 @@ struct ContentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Custom toolbar
-            HStack {
-                Text("Photo Sticker Board")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Button(action: {
-                    isImporting = true
-                }) {
-                    Label("Add Photo", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                
-                Button(action: {
-                    if let selected = selectedSticker {
-                        stickers.removeAll { $0.id == selected.id }
-                        selectedSticker = nil
-                    }
-                }) {
-                    Label("Delete", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
-                .disabled(selectedSticker == nil)
-                
-                Button(action: {
-                    stickers.removeAll()
-                    selectedSticker = nil
-                }) {
-                    Label("Clear All", systemImage: "trash.fill")
-                }
-                .buttonStyle(.bordered)
-                .disabled(stickers.isEmpty)
-            }
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
-            .border(Color.gray.opacity(0.2), width: 0.5)
-            
             // Sticker board canvas
             GeometryReader { geometry in
                 let _ = DispatchQueue.main.async {
@@ -86,58 +47,97 @@ struct ContentView: View {
                     
                     // Photo stickers
                     ForEach(stickers) { sticker in
-                    PhotoStickerView(
-                        sticker: sticker,
-                        isSelected: selectedSticker?.id == sticker.id,
-                        onTap: { selectedSticker = sticker },
-                        onDragChanged: { value in
-                            if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                // Get the drag start position for this sticker
-                                let startPosition = dragStartPositions[sticker.id] ?? sticker.position
-                                
-                                // Use the drag start position plus current translation for more predictable movement
-                                let newX = startPosition.x + value.translation.width
-                                let newY = startPosition.y + value.translation.height
-                                
-                                // Get the actual sticker dimensions
-                                let stickerWidth = sticker.size.width
-                                let stickerHeight = sticker.size.height
-                                
-                                // Apply boundary constraints using actual view dimensions
-                                let minX = stickerWidth / 2
-                                let maxX = geometry.size.width - stickerWidth / 2
-                                let minY = stickerHeight / 2
-                                let maxY = geometry.size.height - stickerHeight / 2
-                                
-                                let constrainedX = max(minX, min(maxX, newX))
-                                let constrainedY = max(minY, min(maxY, newY))
-                                
-                                stickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
+                        PhotoStickerView(
+                            sticker: sticker,
+                            isSelected: selectedSticker?.id == sticker.id,
+                            onTap: { selectedSticker = sticker },
+                            onDragChanged: { value in
+                                if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
+                                    // Get the drag start position for this sticker
+                                    let startPosition = dragStartPositions[sticker.id] ?? sticker.position
+                                    
+                                    // Use the drag start position plus current translation for more predictable movement
+                                    let newX = startPosition.x + value.translation.width
+                                    let newY = startPosition.y + value.translation.height
+                                    
+                                    // Get the actual sticker dimensions
+                                    let stickerWidth = sticker.size.width
+                                    let stickerHeight = sticker.size.height
+                                    
+                                    // Apply boundary constraints using actual view dimensions
+                                    let minX = stickerWidth / 2
+                                    let maxX = geometry.size.width - stickerWidth / 2
+                                    let minY = stickerHeight / 2
+                                    let maxY = geometry.size.height - stickerHeight / 2
+                                    
+                                    let constrainedX = max(minX, min(maxX, newX))
+                                    let constrainedY = max(minY, min(maxY, newY))
+                                    
+                                    stickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
+                                }
+                            },
+                            onDragStart: {
+                                dragStartPositions[sticker.id] = sticker.position
+                            },
+                            onDragEnd: {
+                                dragStartPositions.removeValue(forKey: sticker.id)
+                            },
+                            onResize: { newSize in
+                                if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
+                                    stickers[index].size = newSize
+                                }
+                            },
+                            onRotate: { newRotation in
+                                if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
+                                    stickers[index].rotation = newRotation
+                                }
                             }
-                        },
-                        onDragStart: {
-                            dragStartPositions[sticker.id] = sticker.position
-                        },
-                        onDragEnd: {
-                            dragStartPositions.removeValue(forKey: sticker.id)
-                        },
-                        onResize: { newSize in
-                            if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                stickers[index].size = newSize
+                        )
+                    }
+                    
+                    // Floating toolbar at bottom
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {
+                                isImporting = true
+                            }) {
+                                Label("Add Photo", systemImage: "plus")
                             }
-                        },
-                        onRotate: { newRotation in
-                            if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                stickers[index].rotation = newRotation
+                            .buttonStyle(.borderedProminent)
+                            
+                            Button(action: {
+                                if let selected = selectedSticker {
+                                    stickers.removeAll { $0.id == selected.id }
+                                    selectedSticker = nil
+                                }
+                            }) {
+                                Label("Delete", systemImage: "trash")
                             }
+                            .buttonStyle(.bordered)
+                            .disabled(selectedSticker == nil)
+                            
+                            Button(action: {
+                                stickers.removeAll()
+                                selectedSticker = nil
+                            }) {
+                                Label("Clear All", systemImage: "trash.fill")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(stickers.isEmpty)
+                            
+                            Spacer()
                         }
-                    )
+                        .padding()
+                        .padding(.bottom, 20)
+                    }
                 }
-            }
-        }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onTapGesture {
-                selectedSticker = nil
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onTapGesture {
+                    selectedSticker = nil
+                }
             }
         }
         .fileImporter(
