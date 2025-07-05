@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var selectedSticker: PhotoSticker?
     @State private var dragStartPositions: [UUID: CGPoint] = [:]
+    @State private var viewSize: CGSize = .zero
     
     var body: some View {
         VStack(spacing: 0) {
@@ -71,18 +72,20 @@ struct ContentView: View {
             .border(Color.gray.opacity(0.2), width: 0.5)
             
             // Sticker board canvas
-            ZStack {
-                // Background
-                Color(NSColor.controlBackgroundColor)
-                    .ignoresSafeArea()
-                
-                // Grid background for visual reference
-                GridBackground()
-                
-
-                
-                // Photo stickers
-                ForEach(stickers) { sticker in
+            GeometryReader { geometry in
+                let _ = DispatchQueue.main.async {
+                    viewSize = geometry.size
+                }
+                ZStack {
+                    // Background
+                    Color(NSColor.controlBackgroundColor)
+                        .ignoresSafeArea()
+                    
+                    // Grid background for visual reference
+                    GridBackground()
+                    
+                    // Photo stickers
+                    ForEach(stickers) { sticker in
                     PhotoStickerView(
                         sticker: sticker,
                         isSelected: selectedSticker?.id == sticker.id,
@@ -100,11 +103,11 @@ struct ContentView: View {
                                 let stickerWidth = sticker.size.width
                                 let stickerHeight = sticker.size.height
                                 
-                                // Apply boundary constraints using actual sticker dimensions
+                                // Apply boundary constraints using actual view dimensions
                                 let minX = stickerWidth / 2
-                                let maxX = 800 - stickerWidth / 2  // Window width
+                                let maxX = geometry.size.width - stickerWidth / 2
                                 let minY = stickerHeight / 2
-                                let maxY = 600 - stickerHeight / 2  // Window height
+                                let maxY = geometry.size.height - stickerHeight / 2
                                 
                                 let constrainedX = max(minX, min(maxX, newX))
                                 let constrainedY = max(minY, min(maxY, newY))
@@ -131,6 +134,7 @@ struct ContentView: View {
                     )
                 }
             }
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onTapGesture {
                 selectedSticker = nil
@@ -160,9 +164,11 @@ struct ContentView: View {
                     
                     if let imageData = try? Data(contentsOf: url) {
                         print("Successfully loaded image data: \(imageData.count) bytes")
+                        let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
+                        let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
                         let newSticker = PhotoSticker(
                             imageData: imageData,
-                            position: CGPoint(x: 400, y: 300) // Center position
+                            position: CGPoint(x: centerX, y: centerY)
                         )
                         stickers.append(newSticker)
                         print("Added sticker. Total stickers: \(stickers.count)")
@@ -228,18 +234,33 @@ struct PhotoStickerView: View {
         ZStack {
             // Main image
             if let nsImage = NSImage(data: sticker.imageData) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: sticker.size.width, height: sticker.size.height)
-                    .rotationEffect(.degrees(sticker.rotation + rotationAngle))
-                    .shadow(color: .black.opacity(isDragging ? 0.5 : 0.3), radius: isSelected ? 8 : 4, x: 0, y: isDragging ? 4 : 2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(isSelected ? Color.blue : Color.white, lineWidth: isDragging ? 3 : 2)
-                    )
-                    .scaleEffect(isDragging ? 1.05 : 1.0)
-                    .animation(.easeInOut(duration: 0.1), value: isDragging)
+                ZStack(alignment: .trailing) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .padding(8)
+                        .background(Color.white)
+                        .clipShape(Rectangle())
+                        .frame(width: sticker.size.width, height: sticker.size.height)
+                        .rotationEffect(.degrees(sticker.rotation + rotationAngle))
+                        .shadow(color: .black.opacity(isDragging ? 0.5 : 0.3), radius: isSelected ? 8 : 4, x: 0, y: isDragging ? 4 : 2)
+                        .scaleEffect(isDragging ? 1.05 : 1.0)
+                        .animation(.easeInOut(duration: 0.1), value: isDragging)
+                    
+                    if isSelected {
+                        ResizeSideHandle(
+                            onDrag: { value in
+                                // Only use horizontal drag for resizing
+                                let delta = value.translation.width
+                                let newWidth = max(50, sticker.size.width + delta)
+                                let aspectRatio = sticker.size.width / sticker.size.height
+                                let newHeight = max(50, newWidth / aspectRatio)
+                                onResize(CGSize(width: newWidth, height: newHeight))
+                            }
+                        )
+                        .offset(x: 12, y: 0)
+                    }
+                }
             } else {
                 // Fallback if image fails to load
                 Rectangle()
@@ -250,38 +271,22 @@ struct PhotoStickerView: View {
                             .foregroundColor(.red)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.white, lineWidth: 2)
+                        Rectangle()
+                            .stroke(Color.white, lineWidth: 4)
                     )
             }
             
             // Selection controls
             if isSelected {
-                // Resize handle
-                VStack {
-                    HStack {
-                        Spacer()
-                        ResizeHandle(onChanged: { value in
-                            let newWidth = max(50, sticker.size.width + value.translation.width)
-                            let newHeight = max(50, sticker.size.height + value.translation.height)
-                            onResize(CGSize(width: newWidth, height: newHeight))
-                        })
-                    }
-                    Spacer()
-                }
-                
                 // Rotation handle
                 VStack {
                     HStack {
                         Spacer()
-                        VStack {
-                            RotationHandle(onChanged: { value in
-                                let center = CGPoint(x: sticker.size.width / 2, y: sticker.size.height / 2)
-                                let angle = atan2(value.location.y - center.y, value.location.x - center.x)
-                                onRotate(angle * 180 / Double.pi)
-                            })
-                            Spacer()
-                        }
+                        RotationHandle(onChanged: { value in
+                            let center = CGPoint(x: sticker.size.width / 2, y: sticker.size.height / 2)
+                            let angle = atan2(value.location.y - center.y, value.location.x - center.x)
+                            onRotate(angle * 180 / Double.pi)
+                        })
                     }
                 }
             }
@@ -307,27 +312,6 @@ struct PhotoStickerView: View {
     }
 }
 
-struct ResizeHandle: View {
-    var onChanged: (DragGesture.Value) -> Void
-    
-    var body: some View {
-        Circle()
-            .fill(Color.blue)
-            .frame(width: 20, height: 20)
-            .overlay(
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .foregroundColor(.white)
-                    .font(.system(size: 10))
-            )
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        onChanged(value)
-                    }
-            )
-    }
-}
-
 struct RotationHandle: View {
     var onChanged: (DragGesture.Value) -> Void
     
@@ -346,6 +330,31 @@ struct RotationHandle: View {
                         onChanged(value)
                     }
             )
+    }
+}
+
+struct ResizeSideHandle: View {
+    var onDrag: (DragGesture.Value) -> Void
+    @State private var isHovering = false
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isHovering ? Color.blue : Color.gray)
+                .frame(width: 24, height: 24)
+                .shadow(radius: isHovering ? 6 : 2)
+            Image(systemName: "arrow.left.and.right")
+                .foregroundColor(.white)
+                .font(.system(size: 12, weight: .bold))
+        }
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    onDrag(value)
+                }
+        )
     }
 }
 
