@@ -29,17 +29,23 @@ struct ContentView: View {
     @State private var selectedSticker: PhotoSticker?
     @State private var dragStartPositions: [UUID: CGPoint] = [:]
     @State private var viewSize: CGSize = .zero
+    @State private var backgroundColor: Color = Color(NSColor.controlBackgroundColor)
+    @State private var showingColorPicker = false
+    @State private var tempBackgroundColor: Color = Color(NSColor.controlBackgroundColor)
+    @State private var showAddTooltip = false
+    @State private var addButtonHoverTimer: Timer?
+    @State private var showDeleteTooltip = false
+    @State private var deleteButtonHoverTimer: Timer?
+    @State private var showClearAllTooltip = false
+    @State private var clearAllButtonHoverTimer: Timer?
     
     var body: some View {
         VStack(spacing: 0) {
             // Sticker board canvas
             GeometryReader { geometry in
-                let _ = DispatchQueue.main.async {
-                    viewSize = geometry.size
-                }
                 ZStack {
                     // Background
-                    Color(NSColor.controlBackgroundColor)
+                    backgroundColor
                         .ignoresSafeArea()
                     
                     // Grid background for visual reference
@@ -104,9 +110,48 @@ struct ContentView: View {
                             Button(action: {
                                 isImporting = true
                             }) {
-                                Label("Add Photo", systemImage: "plus")
+                                Text("+")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                if hovering {
+                                    // Cancel any existing timer
+                                    addButtonHoverTimer?.invalidate()
+                                    
+                                    // Start a new timer
+                                    addButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                        showAddTooltip = true
+                                    }
+                                } else {
+                                    // Cancel timer and hide tooltip
+                                    addButtonHoverTimer?.invalidate()
+                                    addButtonHoverTimer = nil
+                                    showAddTooltip = false
+                                }
+                            }
+                            .overlay(
+                                Group {
+                                    if showAddTooltip {
+                                        Text("add sticker")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.8))
+                                            .cornerRadius(6)
+                                            .fixedSize()
+                                            .offset(y: -40)
+                                            .transition(.opacity)
+                                            .animation(.easeInOut(duration: 0.2), value: showAddTooltip)
+                                    }
+                                }
+                            )
                             
                             Button(action: {
                                 if let selected = selectedSticker {
@@ -114,19 +159,96 @@ struct ContentView: View {
                                     selectedSticker = nil
                                 }
                             }) {
-                                Label("Delete", systemImage: "trash")
+                                Text("×")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(selectedSticker == nil ? .gray : .black)
+                                    .frame(width: 32, height: 32)
+                                    .background(selectedSticker == nil ? Color.gray.opacity(0.2) : Color.white)
+                                    .clipShape(Circle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
                             .disabled(selectedSticker == nil)
+                            .onHover { hovering in
+                                if hovering {
+                                    // Cancel any existing timer
+                                    deleteButtonHoverTimer?.invalidate()
+                                    
+                                    // Start a new timer
+                                    deleteButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                        showDeleteTooltip = true
+                                    }
+                                } else {
+                                    // Cancel timer and hide tooltip
+                                    deleteButtonHoverTimer?.invalidate()
+                                    deleteButtonHoverTimer = nil
+                                    showDeleteTooltip = false
+                                }
+                            }
+                            .overlay(
+                                Group {
+                                    if showDeleteTooltip {
+                                        Text("delete")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.8))
+                                            .cornerRadius(6)
+                                            .fixedSize()
+                                            .offset(y: -40)
+                                            .transition(.opacity)
+                                            .animation(.easeInOut(duration: 0.2), value: showDeleteTooltip)
+                                    }
+                                }
+                            )
                             
                             Button(action: {
                                 stickers.removeAll()
                                 selectedSticker = nil
                             }) {
-                                Label("Clear All", systemImage: "trash.fill")
+                                Image(systemName: "trash")
+                                    .font(.title2)
+                                    .foregroundColor(stickers.isEmpty ? .gray : .white)
+                                    .frame(width: 32, height: 32)
+                                    .background(stickers.isEmpty ? Color.gray.opacity(0.2) : Color.red)
+                                    .clipShape(Circle())
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
                             .disabled(stickers.isEmpty)
+                            .onHover { hovering in
+                                if hovering {
+                                    // Cancel any existing timer
+                                    clearAllButtonHoverTimer?.invalidate()
+                                    
+                                    // Start a new timer
+                                    clearAllButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                        showClearAllTooltip = true
+                                    }
+                                } else {
+                                    // Cancel timer and hide tooltip
+                                    clearAllButtonHoverTimer?.invalidate()
+                                    clearAllButtonHoverTimer = nil
+                                    showClearAllTooltip = false
+                                }
+                            }
+                            .overlay(
+                                Group {
+                                    if showClearAllTooltip {
+                                        Text("clear all")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.8))
+                                            .cornerRadius(6)
+                                            .fixedSize()
+                                            .offset(y: -40)
+                                            .transition(.opacity)
+                                            .animation(.easeInOut(duration: 0.2), value: showClearAllTooltip)
+                                    }
+                                }
+                            )
                             
                             Spacer()
                         }
@@ -138,6 +260,15 @@ struct ContentView: View {
                 .onTapGesture {
                     selectedSticker = nil
                 }
+                .onAppear {
+                    viewSize = geometry.size
+                }
+                .contextMenu {
+                    Button("Change Color") {
+                        tempBackgroundColor = backgroundColor
+                        showingColorPicker = true
+                    }
+                }
             }
         }
         .fileImporter(
@@ -147,23 +278,16 @@ struct ContentView: View {
         ) { result in
             switch result {
             case .success(let urls):
-                print("Selected \(urls.count) images")
                 for url in urls {
-                    print("Processing URL: \(url)")
-                    
-                    // Start accessing the security-scoped resource
                     guard url.startAccessingSecurityScopedResource() else {
-                        print("Failed to access security-scoped resource: \(url)")
                         continue
                     }
                     
                     defer {
-                        // Stop accessing the security-scoped resource
                         url.stopAccessingSecurityScopedResource()
                     }
                     
                     if let imageData = try? Data(contentsOf: url) {
-                        print("Successfully loaded image data: \(imageData.count) bytes")
                         let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
                         let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
                         let newSticker = PhotoSticker(
@@ -171,15 +295,26 @@ struct ContentView: View {
                             position: CGPoint(x: centerX, y: centerY)
                         )
                         stickers.append(newSticker)
-                        print("Added sticker. Total stickers: \(stickers.count)")
-                    } else {
-                        print("Failed to load image data from: \(url)")
                     }
                 }
             case .failure(let error):
                 print("Error importing images: \(error.localizedDescription)")
             }
         }
+        .overlay(
+            ColorPickerModal(
+                backgroundColor: $tempBackgroundColor,
+                isPresented: $showingColorPicker,
+                onConfirm: {
+                    backgroundColor = tempBackgroundColor
+                    showingColorPicker = false
+                },
+                onCancel: {
+                    tempBackgroundColor = backgroundColor
+                    showingColorPicker = false
+                }
+            )
+        )
     }
 }
 
@@ -278,17 +413,12 @@ struct PhotoStickerView: View {
             
             // Selection controls
             if isSelected {
-                // Rotation handle
-                VStack {
-                    HStack {
-                        Spacer()
-                        RotationHandle(onChanged: { value in
-                            let center = CGPoint(x: sticker.size.width / 2, y: sticker.size.height / 2)
-                            let angle = atan2(value.location.y - center.y, value.location.x - center.x)
-                            onRotate(angle * 180 / Double.pi)
-                        })
-                    }
-                }
+                // Rotation handle at bottom right
+                RotationHandle(
+                    currentRotation: sticker.rotation,
+                    onRotate: onRotate
+                )
+                .offset(x: 0, y: 0)
             }
         }
         .position(sticker.position)
@@ -313,23 +443,43 @@ struct PhotoStickerView: View {
 }
 
 struct RotationHandle: View {
-    var onChanged: (DragGesture.Value) -> Void
+    let currentRotation: Double
+    let onRotate: (Double) -> Void
+    
+    @State private var isHovering = false
+    @State private var startAngle: Double = 0
     
     var body: some View {
-        Circle()
-            .fill(Color.orange)
-            .frame(width: 20, height: 20)
-            .overlay(
-                Image(systemName: "rotate.3d")
-                    .foregroundColor(.white)
-                    .font(.system(size: 10))
-            )
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        onChanged(value)
+        ZStack {
+            Circle()
+                .fill(isHovering ? Color.blue : Color.gray)
+                .frame(width: 24, height: 24)
+                .shadow(radius: isHovering ? 6 : 2)
+            Image(systemName: "rotate.3d")
+                .foregroundColor(.white)
+                .font(.system(size: 12, weight: .bold))
+        }
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    let center = CGPoint(x: 12, y: 12) // Center of the 24x24 circle
+                    let currentPoint = CGPoint(x: value.location.x, y: value.location.y)
+                    let angle = atan2(currentPoint.y - center.y, currentPoint.x - center.x) * 180.0 / Double.pi
+                    
+                    if startAngle == 0 {
+                        startAngle = angle - currentRotation
                     }
-            )
+                    
+                    let newRotation = angle - startAngle
+                    onRotate(newRotation)
+                }
+                .onEnded { _ in
+                    startAngle = 0
+                }
+        )
     }
 }
 
@@ -354,6 +504,134 @@ struct ResizeSideHandle: View {
                 .onChanged { value in
                     onDrag(value)
                 }
+        )
+    }
+}
+
+// MARK: - Color Picker Modal
+
+struct ColorPickerModal: View {
+    @Binding var backgroundColor: Color
+    @Binding var isPresented: Bool
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+    
+    @State private var backgroundOpacity: Double = 0
+    @State private var modalOpacity: Double = 0
+    
+    private let graySwatches: [Color] = [
+        Color(hex: "#1e1e1e"), // Darkest
+        Color(hex: "#4a4a4a"),
+        Color(hex: "#7a7a7a"),
+        Color(hex: "#b8b8b8"),
+        Color(hex: "#fafafa")  // Lightest
+    ]
+    
+    var body: some View {
+        ZStack {
+            // Background overlay
+            Color.black.opacity(backgroundOpacity)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    onCancel()
+                }
+            
+            // Modal content
+            VStack(spacing: 20) {
+                VStack(spacing: 2) {
+                    ForEach(0..<graySwatches.count, id: \.self) { index in
+                        Button(action: {
+                            backgroundColor = graySwatches[index]
+                        }) {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(graySwatches[index])
+                                .frame(width: 150, height: 40)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(backgroundColor == graySwatches[index] ? Color.blue : Color.clear, lineWidth: 2)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 40)
+                
+                HStack(spacing: 20) {
+                    // Confirm button (checkmark)
+                    Button(action: onConfirm) {
+                        Text("✓")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.black)
+                            .frame(width: 32, height: 32)
+                            .background(Color.white)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Cancel button (X)
+                    Button(action: onCancel) {
+                        Text("×")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.black)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 20)
+            }
+            .frame(width: 280)
+            .background(Color.black)
+            .cornerRadius(32)
+            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .opacity(modalOpacity)
+        }
+        .onChange(of: isPresented) { newValue in
+            if newValue {
+                // Show modal
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    backgroundOpacity = 0.5
+                    modalOpacity = 1
+                }
+            } else {
+                // Hide modal
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    backgroundOpacity = 0
+                    modalOpacity = 0
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Color Extension for Hex Support
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
         )
     }
 }
