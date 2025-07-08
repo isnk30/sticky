@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 struct PhotoSticker: Identifiable {
     let id = UUID()
@@ -55,13 +56,37 @@ struct ContentView: View {
     @State private var tempBackgroundColor: Color = Color(NSColor.controlBackgroundColor)
     @State private var showAddTooltip = false
     @State private var addButtonHoverTimer: Timer?
+    @State private var showAddTextTooltip = false
+    @State private var addTextButtonHoverTimer: Timer?
     @State private var showDeleteTooltip = false
     @State private var deleteButtonHoverTimer: Timer?
     @State private var showClearAllTooltip = false
     @State private var clearAllButtonHoverTimer: Timer?
     
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            KeyEventHandlingView(
+                onDelete: {
+                    if let selected = selectedSticker {
+                        stickers.removeAll { $0.id == selected.id }
+                        selectedSticker = nil
+                    } else if let selected = selectedTextSticker {
+                        textStickers.removeAll { $0.id == selected.id }
+                        selectedTextSticker = nil
+                    }
+                },
+                onMove: { dx, dy in
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                        let old = stickers[idx].position
+                        stickers[idx].position = CGPoint(x: old.x + dx, y: old.y + dy)
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        let old = textStickers[idx].position
+                        textStickers[idx].position = CGPoint(x: old.x + dx, y: old.y + dy)
+                    }
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.clear)
             // Sticker board canvas
             GeometryReader { geometry in
                 ZStack {
@@ -254,8 +279,23 @@ struct ContentView: View {
                     VStack {
                         Spacer()
                         HStack {
+                            // List button on the left
+                            Button(action: {
+                                // TODO: Add list functionality
+                            }) {
+                                Image(systemName: "list.bullet")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color(hex: "#2e2e2e"))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.leading, 20)
+                            
                             Spacer()
                             
+                            // Centered buttons
                             Button(action: {
                                 isImporting = true
                             }) {
@@ -265,27 +305,6 @@ struct ContentView: View {
                                     .foregroundColor(.white)
                                     .frame(width: 32, height: 32)
                                     .background(Color.blue)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            
-                            Button(action: {
-                                let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
-                                let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
-                                let newTextSticker = TextSticker(
-                                    text: "Text",
-                                    position: CGPoint(x: centerX, y: centerY)
-                                )
-                                textStickers.append(newTextSticker)
-                                selectedTextSticker = newTextSticker
-                                selectedSticker = nil
-                            }) {
-                                Text("T")
-                                    .font(.title2)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                                    .frame(width: 32, height: 32)
-                                    .background(Color.green)
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -319,6 +338,60 @@ struct ContentView: View {
                                             .offset(y: -40)
                                             .transition(.opacity)
                                             .animation(.easeInOut(duration: 0.2), value: showAddTooltip)
+                                    }
+                                }
+                            )
+                            
+                            Button(action: {
+                                let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
+                                let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
+                                let newTextSticker = TextSticker(
+                                    text: "Text",
+                                    position: CGPoint(x: centerX, y: centerY)
+                                )
+                                textStickers.append(newTextSticker)
+                                selectedTextSticker = newTextSticker
+                                selectedSticker = nil
+                            }) {
+                                Text("T")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .frame(width: 32, height: 32)
+                                    .background(Color.green)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in
+                                if hovering {
+                                    // Cancel any existing timer
+                                    addTextButtonHoverTimer?.invalidate()
+                                    
+                                    // Start a new timer
+                                    addTextButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                        showAddTextTooltip = true
+                                    }
+                                } else {
+                                    // Cancel timer and hide tooltip
+                                    addTextButtonHoverTimer?.invalidate()
+                                    addTextButtonHoverTimer = nil
+                                    showAddTextTooltip = false
+                                }
+                            }
+                            .overlay(
+                                Group {
+                                    if showAddTextTooltip {
+                                        Text("add text")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.8))
+                                            .cornerRadius(6)
+                                            .fixedSize()
+                                            .offset(y: -40)
+                                            .transition(.opacity)
+                                            .animation(.easeInOut(duration: 0.2), value: showAddTextTooltip)
                                     }
                                 }
                             )
@@ -376,6 +449,9 @@ struct ContentView: View {
                                 }
                             )
                             
+                            Spacer()
+                            
+                            // Clear all button on the right
                             Button(action: {
                                 stickers.removeAll()
                                 textStickers.removeAll()
@@ -384,9 +460,9 @@ struct ContentView: View {
                             }) {
                                 Image(systemName: "trash")
                                     .font(.title2)
-                                    .foregroundColor((stickers.isEmpty && textStickers.isEmpty) ? .gray : .white)
+                                    .foregroundColor((stickers.isEmpty && textStickers.isEmpty) ? .gray : .red)
                                     .frame(width: 32, height: 32)
-                                    .background((stickers.isEmpty && textStickers.isEmpty) ? Color.gray.opacity(0.2) : Color.red)
+                                    .background((stickers.isEmpty && textStickers.isEmpty) ? Color.gray.opacity(0.2) : Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -424,8 +500,7 @@ struct ContentView: View {
                                     }
                                 }
                             )
-                            
-                            Spacer()
+                            .padding(.trailing, 20)
                         }
                         .padding()
                         .padding(.bottom, 20)
@@ -494,6 +569,48 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Key Event Handling
+
+struct KeyEventHandlingView: NSViewRepresentable {
+    var onDelete: () -> Void
+    var onMove: (_ dx: CGFloat, _ dy: CGFloat) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = KeyCatcherView()
+        view.onDelete = onDelete
+        view.onMove = onMove
+        DispatchQueue.main.async {
+            view.window?.makeFirstResponder(view)
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    class KeyCatcherView: NSView {
+        var onDelete: (() -> Void)?
+        var onMove: ((_ dx: CGFloat, _ dy: CGFloat) -> Void)?
+        override var acceptsFirstResponder: Bool { true }
+        override func keyDown(with event: NSEvent) {
+            let shift = event.modifierFlags.contains(.shift)
+            let increment: CGFloat = shift ? 40 : 10
+            switch event.keyCode {
+            case 51: // delete/backspace
+                onDelete?()
+            case 123: // left arrow
+                onMove?(-increment, 0)
+            case 124: // right arrow
+                onMove?(increment, 0)
+            case 125: // down arrow
+                onMove?(0, increment)
+            case 126: // up arrow
+                onMove?(0, -increment)
+            default:
+                super.keyDown(with: event)
+            }
+        }
+    }
+}
+
 struct GridBackground: View {
     var body: some View {
         Canvas { context, size in
@@ -547,34 +664,78 @@ struct PhotoStickerView: View {
     
     var body: some View {
         ZStack {
-            // Main image
             if let nsImage = NSImage(data: sticker.imageData) {
-                ZStack(alignment: .trailing) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .padding(8)
-                        .background(Color.white)
-                        .clipShape(Rectangle())
-                        .frame(width: sticker.size.width, height: sticker.size.height)
-                        .rotationEffect(.degrees(sticker.rotation + rotationAngle))
-                        .shadow(color: .black.opacity(isDragging ? 0.5 : 0.3), radius: isSelected ? 8 : 4, x: 0, y: isDragging ? 4 : 2)
-                        .scaleEffect(isDragging ? 1.05 : 1.0)
-                        .animation(.easeInOut(duration: 0.1), value: isDragging)
-                    
-                    if isSelected {
-                        ResizeSideHandle(
-                            onDrag: { value in
-                                // Only use horizontal drag for resizing
-                                let delta = value.translation.width
-                                let newWidth = max(50, sticker.size.width + delta)
-                                let aspectRatio = sticker.size.width / sticker.size.height
-                                let newHeight = max(50, newWidth / aspectRatio)
-                                onResize(CGSize(width: newWidth, height: newHeight))
+                ZStack {
+                    // Rotated content
+                    ZStack {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .padding(8)
+                            .background(Color.white)
+                            .clipShape(Rectangle())
+                            .frame(width: sticker.size.width, height: sticker.size.height)
+                            .shadow(color: .black.opacity(isDragging ? 0.5 : 0.3), radius: isSelected ? 8 : 4, x: 0, y: isDragging ? 4 : 2)
+                            .scaleEffect(isDragging ? 1.05 : 1.0)
+                            .animation(.easeInOut(duration: 0.1), value: isDragging)
+                        // Z-ordering buttons (bottom edge)
+                        if isSelected {
+                            HStack(spacing: 8) {
+                                Button(action: onSendToBack) {
+                                    Image(systemName: "chevron.down.2")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 24, height: 24)
+                                        .background(Color.gray.opacity(0.3))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                Button(action: onSendBackward) {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 24, height: 24)
+                                        .background(Color.gray.opacity(0.3))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                Button(action: onMoveForward) {
+                                    Image(systemName: "chevron.up")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 24, height: 24)
+                                        .background(Color.gray.opacity(0.3))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                Button(action: onMoveToFront) {
+                                    Image(systemName: "chevron.up.2")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 24, height: 24)
+                                        .background(Color.gray.opacity(0.3))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
                             }
-                        )
-                        .offset(x: 12, y: 0)
+                            .offset(y: (sticker.size.height / 2) + 8) // closer to the bottom edge
+                        }
+                        // Resize handle (right edge)
+                        if isSelected {
+                            ResizeSideHandle(
+                                onDrag: { value in
+                                    // Only use horizontal drag for resizing
+                                    let delta = value.translation.width
+                                    let newWidth = max(50, sticker.size.width + delta)
+                                    let aspectRatio = sticker.size.width / sticker.size.height
+                                    let newHeight = max(50, newWidth / aspectRatio)
+                                    onResize(CGSize(width: newWidth, height: newHeight))
+                                }
+                            )
+                            .offset(x: (sticker.size.width / 2) + 12, y: 0)
+                        }
                     }
+                    .rotationEffect(.degrees(sticker.rotation + rotationAngle))
                 }
             } else {
                 // Fallback if image fails to load
@@ -590,62 +751,8 @@ struct PhotoStickerView: View {
                             .stroke(Color.white, lineWidth: 4)
                     )
             }
-            
-            // Selection controls
+            // Rotation handle at bottom right (not rotated)
             if isSelected {
-                // Z-index control buttons at top
-                HStack(spacing: 8) {
-                    // Send to Back
-                    Button(action: onSendToBack) {
-                        Text("SB")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Send Backward
-                    Button(action: onSendBackward) {
-                        Text("SBW")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Move Forward
-                    Button(action: onMoveForward) {
-                        Text("MF")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Move to Front
-                    Button(action: onMoveToFront) {
-                        Text("MTF")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .offset(y: -sticker.size.height / 2 - 20)
-                
-                // Rotation handle at bottom right
                 RotationHandle(
                     currentRotation: sticker.rotation,
                     onRotate: onRotate
@@ -821,8 +928,8 @@ struct ColorPickerModal: View {
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
             .opacity(modalOpacity)
         }
-        .onChange(of: isPresented) { newValue in
-            if newValue {
+        .onChange(of: isPresented) {
+            if isPresented {
                 // Show modal
                 withAnimation(.easeInOut(duration: 0.2)) {
                     backgroundOpacity = 0.5
@@ -931,57 +1038,58 @@ struct TextStickerView: View {
             
             // Selection controls
             if isSelected {
-                // Z-index control buttons at top
-                HStack(spacing: 8) {
-                    // Send to Back
-                    Button(action: onSendToBack) {
-                        Text("SB")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
+                ZStack {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            // Send to Back
+                            Button(action: onSendToBack) {
+                                Image(systemName: "chevron.down.2")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.gray.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in }
+                            // Send Backward
+                            Button(action: onSendBackward) {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.gray.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in }
+                            // Move Forward
+                            Button(action: onMoveForward) {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.gray.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in }
+                            // Move to Front
+                            Button(action: onMoveToFront) {
+                                Image(systemName: "chevron.up.2")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.gray.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { hovering in }
+                        }
+                        .padding(.bottom, 6)
                     }
-                    .buttonStyle(.plain)
-                    
-                    // Send Backward
-                    Button(action: onSendBackward) {
-                        Text("SBW")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Move Forward
-                    Button(action: onMoveForward) {
-                        Text("MF")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Move to Front
-                    Button(action: onMoveToFront) {
-                        Text("MTF")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
                 }
-                .offset(y: -textSize().height / 2 - 20)
                 
                 // Font size handle at text edge
                 ResizeSideHandle(

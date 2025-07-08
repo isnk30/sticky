@@ -15,6 +15,6 @@ struct testerApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
-        .defaultSize(width: 800, height: 600)
+        .defaultSize(width: 1920, height: 1080)
     }
 }
