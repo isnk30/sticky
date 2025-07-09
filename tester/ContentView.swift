@@ -62,6 +62,7 @@ struct ContentView: View {
     @State private var deleteButtonHoverTimer: Timer?
     @State private var showClearAllTooltip = false
     @State private var clearAllButtonHoverTimer: Timer?
+    @State private var showStickerList = false
     
     var body: some View {
         ZStack {
@@ -83,6 +84,59 @@ struct ContentView: View {
                         let old = textStickers[idx].position
                         textStickers[idx].position = CGPoint(x: old.x + dx, y: old.y + dy)
                     }
+                },
+                onResetRotation: {
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                        stickers[idx].rotation = 0
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        textStickers[idx].rotation = 0
+                    }
+                },
+                onClearAll: {
+                    stickers.removeAll()
+                    textStickers.removeAll()
+                    selectedSticker = nil
+                    selectedTextSticker = nil
+                },
+                onSendBackward: {
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }), idx > 0 {
+                        let sticker = stickers.remove(at: idx)
+                        stickers.insert(sticker, at: idx - 1)
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }), idx > 0 {
+                        let textSticker = textStickers.remove(at: idx)
+                        textStickers.insert(textSticker, at: idx - 1)
+                    }
+                },
+                onSendForward: {
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }), idx < stickers.count - 1 {
+                        let sticker = stickers.remove(at: idx)
+                        stickers.insert(sticker, at: idx + 1)
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }), idx < textStickers.count - 1 {
+                        let textSticker = textStickers.remove(at: idx)
+                        textStickers.insert(textSticker, at: idx + 1)
+                    }
+                },
+                onSendToBack: {
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                        let sticker = stickers.remove(at: idx)
+                        stickers.insert(sticker, at: 0)
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        let textSticker = textStickers.remove(at: idx)
+                        textStickers.insert(textSticker, at: 0)
+                    }
+                },
+                onSendToFront: {
+                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                        let sticker = stickers.remove(at: idx)
+                        stickers.append(sticker)
+                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        let textSticker = textStickers.remove(at: idx)
+                        textStickers.append(textSticker)
+                    }
+                },
+                onDeselect: {
+                    selectedSticker = nil
+                    selectedTextSticker = nil
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -281,7 +335,7 @@ struct ContentView: View {
                         HStack {
                             // List button on the left
                             Button(action: {
-                                // TODO: Add list functionality
+                                showStickerList.toggle()
                             }) {
                                 Image(systemName: "list.bullet")
                                     .font(.title2)
@@ -292,6 +346,37 @@ struct ContentView: View {
                             }
                             .buttonStyle(.plain)
                             .padding(.leading, 20)
+                            .popover(isPresented: $showStickerList, arrowEdge: .bottom) {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Stickers: \(stickers.count)")
+                                        .font(.headline)
+                                        .padding(.top, 8)
+                                    ScrollView {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            ForEach(stickers) { sticker in
+                                                HStack(spacing: 8) {
+                                                    if let nsImage = NSImage(data: sticker.imageData) {
+                                                        Image(nsImage: nsImage)
+                                                            .resizable()
+                                                            .aspectRatio(contentMode: .fit)
+                                                            .frame(width: 32, height: 32)
+                                                            .cornerRadius(4)
+                                                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                                                    }
+                                                    Text("Sticker")
+                                                        .font(.subheadline)
+                                                        .foregroundColor(.primary)
+                                                }
+                                            }
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
+                                    .frame(maxHeight: 200)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                                .frame(width: 200)
+                            }
                             
                             Spacer()
                             
@@ -574,11 +659,25 @@ struct ContentView: View {
 struct KeyEventHandlingView: NSViewRepresentable {
     var onDelete: () -> Void
     var onMove: (_ dx: CGFloat, _ dy: CGFloat) -> Void
+    var onResetRotation: () -> Void
+    var onClearAll: () -> Void
+    var onSendBackward: () -> Void
+    var onSendForward: () -> Void
+    var onSendToBack: () -> Void
+    var onSendToFront: () -> Void
+    var onDeselect: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = KeyCatcherView()
         view.onDelete = onDelete
         view.onMove = onMove
+        view.onResetRotation = onResetRotation
+        view.onClearAll = onClearAll
+        view.onSendBackward = onSendBackward
+        view.onSendForward = onSendForward
+        view.onSendToBack = onSendToBack
+        view.onSendToFront = onSendToFront
+        view.onDeselect = onDeselect
         DispatchQueue.main.async {
             view.window?.makeFirstResponder(view)
         }
@@ -589,13 +688,25 @@ struct KeyEventHandlingView: NSViewRepresentable {
     class KeyCatcherView: NSView {
         var onDelete: (() -> Void)?
         var onMove: ((_ dx: CGFloat, _ dy: CGFloat) -> Void)?
+        var onResetRotation: (() -> Void)?
+        var onClearAll: (() -> Void)?
+        var onSendBackward: (() -> Void)?
+        var onSendForward: (() -> Void)?
+        var onSendToBack: (() -> Void)?
+        var onSendToFront: (() -> Void)?
+        var onDeselect: (() -> Void)?
         override var acceptsFirstResponder: Bool { true }
         override func keyDown(with event: NSEvent) {
             let shift = event.modifierFlags.contains(.shift)
+            let command = event.modifierFlags.contains(.command)
             let increment: CGFloat = shift ? 40 : 10
             switch event.keyCode {
             case 51: // delete/backspace
-                onDelete?()
+                if command && shift {
+                    onClearAll?()
+                } else {
+                    onDelete?()
+                }
             case 123: // left arrow
                 onMove?(-increment, 0)
             case 124: // right arrow
@@ -604,6 +715,26 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 onMove?(0, increment)
             case 126: // up arrow
                 onMove?(0, -increment)
+            case 15: // R key
+                if command && !shift {
+                    onResetRotation?()
+                } else {
+                    super.keyDown(with: event)
+                }
+            case 33: // [ key
+                if shift {
+                    onSendToBack?()
+                } else {
+                    onSendBackward?()
+                }
+            case 30: // ] key
+                if shift {
+                    onSendToFront?()
+                } else {
+                    onSendForward?()
+                }
+            case 53: // Escape
+                onDeselect?()
             default:
                 super.keyDown(with: event)
             }
@@ -680,6 +811,8 @@ struct PhotoStickerView: View {
                             .animation(.easeInOut(duration: 0.1), value: isDragging)
                         // Z-ordering buttons (bottom edge)
                         if isSelected {
+                            let proportional = sticker.size.height * 0.15
+                            let offset = min(max(proportional, 16), 48)
                             HStack(spacing: 8) {
                                 Button(action: onSendToBack) {
                                     Image(systemName: "chevron.down.2")
@@ -718,7 +851,7 @@ struct PhotoStickerView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
-                            .offset(y: (sticker.size.height / 2) + 8) // closer to the bottom edge
+                            .offset(y: (sticker.size.height / 2) + 24)
                         }
                         // Resize handle (right edge)
                         if isSelected {
