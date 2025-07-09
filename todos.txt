@@ -1,0 +1,10 @@
+- save and export functionallity
+- better designed sticker list
+- better roation ui
+- performance
+- fix everything about text stickers
+-general ui changes
+    - changing text sticker color and icon
+    - changing add sticker color and icon
+- add tooltip to "list stickers" btn
+- undo and redo

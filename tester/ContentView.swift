@@ -63,6 +63,8 @@ struct ContentView: View {
     @State private var showClearAllTooltip = false
     @State private var clearAllButtonHoverTimer: Timer?
     @State private var showStickerList = false
+    @State private var showListTooltip = false
+    @State private var listButtonHoverTimer: Timer?
     
     var body: some View {
         ZStack {
@@ -338,14 +340,48 @@ struct ContentView: View {
                                 showStickerList.toggle()
                             }) {
                                 Image(systemName: "list.bullet")
-                                    .font(.title2)
+                                    .font(.title3)
                                     .foregroundColor(.white)
                                     .frame(width: 32, height: 32)
                                     .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .padding(.leading, 20)
+                            .onHover { hovering in
+                                if hovering {
+                                    // Cancel any existing timer
+                                    listButtonHoverTimer?.invalidate()
+                                    
+                                    // Start a new timer
+                                    listButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                        showListTooltip = true
+                                    }
+                                } else {
+                                    // Cancel timer and hide tooltip
+                                    listButtonHoverTimer?.invalidate()
+                                    listButtonHoverTimer = nil
+                                    showListTooltip = false
+                                }
+                            }
+                            .overlay(
+                                Group {
+                                    if showListTooltip {
+                                        Text("list stickers")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.black.opacity(0.8))
+                                            .cornerRadius(6)
+                                            .fixedSize()
+                                            .offset(x: 68, y: 0)
+                                            .transition(.opacity)
+                                            .animation(.easeInOut(duration: 0.2), value: showListTooltip)
+                                    }
+                                }
+                            )
                             .popover(isPresented: $showStickerList, arrowEdge: .bottom) {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("Stickers: \(stickers.count)")
@@ -384,13 +420,14 @@ struct ContentView: View {
                             Button(action: {
                                 isImporting = true
                             }) {
-                                Text("+")
-                                    .font(.title2)
+                                Image(systemName: "plus")
+                                    .font(.title3)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.black)
                                     .frame(width: 32, height: 32)
-                                    .background(Color.blue)
+                                    .background(Color(hex: "#7dbaff"))
                                     .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -438,13 +475,14 @@ struct ContentView: View {
                                 selectedTextSticker = newTextSticker
                                 selectedSticker = nil
                             }) {
-                                Text("T")
-                                    .font(.title2)
+                                Image(systemName: "character.cursor.ibeam")
+                                    .font(.title3)
                                     .fontWeight(.medium)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.black)
                                     .frame(width: 32, height: 32)
-                                    .background(Color.green)
+                                    .background(Color(hex: "#4ef594"))
                                     .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -490,10 +528,10 @@ struct ContentView: View {
                                     selectedTextSticker = nil
                                 }
                             }) {
-                                Text("×")
-                                    .font(.title2)
+                                Image(systemName: "delete.left")
+                                    .font(.title3)
                                     .fontWeight(.medium)
-                                    .foregroundColor((selectedSticker == nil && selectedTextSticker == nil) ? .gray : .black)
+                                    .foregroundColor((selectedSticker == nil && selectedTextSticker == nil) ? .gray : .red)
                                     .frame(width: 32, height: 32)
                                     .background((selectedSticker == nil && selectedTextSticker == nil) ? Color.gray.opacity(0.2) : Color.white)
                                     .clipShape(Circle())
@@ -544,7 +582,7 @@ struct ContentView: View {
                                 selectedTextSticker = nil
                             }) {
                                 Image(systemName: "trash")
-                                    .font(.title2)
+                                    .font(.title3)
                                     .foregroundColor((stickers.isEmpty && textStickers.isEmpty) ? .gray : .red)
                                     .frame(width: 32, height: 32)
                                     .background((stickers.isEmpty && textStickers.isEmpty) ? Color.gray.opacity(0.2) : Color(hex: "#2e2e2e"))
@@ -579,7 +617,7 @@ struct ContentView: View {
                                             .background(Color.black.opacity(0.8))
                                             .cornerRadius(6)
                                             .fixedSize()
-                                            .offset(y: -40)
+                                            .offset(x: -50, y: 0)
                                             .transition(.opacity)
                                             .animation(.easeInOut(duration: 0.2), value: showClearAllTooltip)
                                     }
@@ -1031,7 +1069,7 @@ struct ColorPickerModal: View {
                 HStack(spacing: 20) {
                     // Confirm button (checkmark)
                     Button(action: onConfirm) {
-                        Text("✓")
+                        Image(systemName: "checkmark")
                             .font(.title2)
                             .fontWeight(.medium)
                             .foregroundColor(.black)
@@ -1043,7 +1081,7 @@ struct ColorPickerModal: View {
                     
                     // Cancel button (X)
                     Button(action: onCancel) {
-                        Text("×")
+                        Image(systemName: "xmark")
                             .font(.title2)
                             .fontWeight(.medium)
                             .foregroundColor(.white)
@@ -1057,7 +1095,7 @@ struct ColorPickerModal: View {
             }
             .frame(width: 280)
             .background(Color.black)
-            .cornerRadius(32)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .circular))
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
             .opacity(modalOpacity)
         }

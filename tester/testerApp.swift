@@ -9,6 +9,9 @@ import SwiftUI
 
 @main
 struct testerApp: App {
+    init() {
+        UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+    }
     var body: some Scene {
         WindowGroup {
             ContentView()
