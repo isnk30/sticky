@@ -52,8 +52,7 @@ struct ContentView: View {
     @State private var dragStartPositions: [UUID: CGPoint] = [:]
     @State private var viewSize: CGSize = .zero
     @State private var backgroundColor: Color = Color(NSColor.controlBackgroundColor)
-    @State private var showingColorPicker = false
-    @State private var tempBackgroundColor: Color = Color(NSColor.controlBackgroundColor)
+    @State private var showColorPicker = false
     @State private var showAddTooltip = false
     @State private var addButtonHoverTimer: Timer?
     @State private var showAddTextTooltip = false
@@ -139,6 +138,23 @@ struct ContentView: View {
                 onDeselect: {
                     selectedSticker = nil
                     selectedTextSticker = nil
+                },
+                onAddSticker: {
+                    isImporting = true
+                },
+                onAddTextSticker: {
+                    let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
+                    let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
+                    let newTextSticker = TextSticker(
+                        text: "Text",
+                        position: CGPoint(x: centerX, y: centerY)
+                    )
+                    textStickers.append(newTextSticker)
+                    selectedTextSticker = newTextSticker
+                    selectedSticker = nil
+                },
+                onToggleStickerList: {
+                    showStickerList.toggle()
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -158,7 +174,9 @@ struct ContentView: View {
                         PhotoStickerView(
                             sticker: sticker,
                             isSelected: selectedSticker?.id == sticker.id,
-                            onTap: { selectedSticker = sticker },
+                            onTap: { 
+                                selectedSticker = sticker 
+                            },
                             onDragChanged: { value in
                                 withAnimation(.none) {
                                     if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
@@ -246,7 +264,9 @@ struct ContentView: View {
                         TextStickerView(
                             textSticker: textSticker,
                             isSelected: selectedTextSticker?.id == textSticker.id,
-                            onTap: { selectedTextSticker = textSticker },
+                            onTap: { 
+                                selectedTextSticker = textSticker 
+                            },
                             onDragChanged: { value in
                                 withAnimation(.none) {
                                     if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
@@ -345,7 +365,6 @@ struct ContentView: View {
                                     .frame(width: 32, height: 32)
                                     .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
-                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .padding(.leading, 20)
@@ -368,7 +387,7 @@ struct ContentView: View {
                             .overlay(
                                 Group {
                                     if showListTooltip {
-                                        Text("list stickers")
+                                        Text("list stickers (⌘L)")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 8)
@@ -376,7 +395,7 @@ struct ContentView: View {
                                             .background(Color.black.opacity(0.8))
                                             .cornerRadius(6)
                                             .fixedSize()
-                                            .offset(x: 68, y: 0)
+                                            .offset(x: 75, y: 0)
                                             .transition(.opacity)
                                             .animation(.easeInOut(duration: 0.2), value: showListTooltip)
                                     }
@@ -427,7 +446,6 @@ struct ContentView: View {
                                     .frame(width: 32, height: 32)
                                     .background(Color(hex: "#7dbaff"))
                                     .clipShape(Circle())
-                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -449,7 +467,7 @@ struct ContentView: View {
                             .overlay(
                                 Group {
                                     if showAddTooltip {
-                                        Text("add sticker")
+                                        Text("add sticker (⌘A)")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 8)
@@ -482,7 +500,6 @@ struct ContentView: View {
                                     .frame(width: 32, height: 32)
                                     .background(Color(hex: "#4ef594"))
                                     .clipShape(Circle())
-                                    .overlay(Circle().stroke(Color.white, lineWidth: 4))
                             }
                             .buttonStyle(.plain)
                             .onHover { hovering in
@@ -504,7 +521,7 @@ struct ContentView: View {
                             .overlay(
                                 Group {
                                     if showAddTextTooltip {
-                                        Text("add text")
+                                        Text("add text (⌘T)")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 8)
@@ -557,7 +574,7 @@ struct ContentView: View {
                             .overlay(
                                 Group {
                                     if showDeleteTooltip {
-                                        Text("delete")
+                                        Text("delete (⌫)")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 8)
@@ -609,7 +626,7 @@ struct ContentView: View {
                             .overlay(
                                 Group {
                                     if showClearAllTooltip {
-                                        Text("clear all")
+                                        Text("clear all (⌘⇧⌫)")
                                             .font(.caption)
                                             .foregroundColor(.white)
                                             .padding(.horizontal, 8)
@@ -617,7 +634,7 @@ struct ContentView: View {
                                             .background(Color.black.opacity(0.8))
                                             .cornerRadius(6)
                                             .fixedSize()
-                                            .offset(x: -50, y: 0)
+                                            .offset(x: -70, y: 0)
                                             .transition(.opacity)
                                             .animation(.easeInOut(duration: 0.2), value: showClearAllTooltip)
                                     }
@@ -639,8 +656,7 @@ struct ContentView: View {
                 }
                 .contextMenu {
                     Button("Change Color") {
-                        tempBackgroundColor = backgroundColor
-                        showingColorPicker = true
+                        showColorPicker.toggle()
                     }
                 }
             }
@@ -676,18 +692,21 @@ struct ContentView: View {
             }
         }
         .overlay(
-            ColorPickerModal(
-                backgroundColor: $tempBackgroundColor,
-                isPresented: $showingColorPicker,
-                onConfirm: {
-                    backgroundColor = tempBackgroundColor
-                    showingColorPicker = false
-                },
-                onCancel: {
-                    tempBackgroundColor = backgroundColor
-                    showingColorPicker = false
+            VStack {
+                if showColorPicker {
+                    ColorPickerOverlay(
+                        backgroundColor: $backgroundColor,
+                        onConfirm: {
+                            showColorPicker = false
+                        },
+                        onCancel: {
+                            showColorPicker = false
+                        }
+                    )
                 }
-            )
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         )
     }
 }
@@ -704,6 +723,9 @@ struct KeyEventHandlingView: NSViewRepresentable {
     var onSendToBack: () -> Void
     var onSendToFront: () -> Void
     var onDeselect: () -> Void
+    var onAddSticker: () -> Void
+    var onAddTextSticker: () -> Void
+    var onToggleStickerList: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = KeyCatcherView()
@@ -716,12 +738,39 @@ struct KeyEventHandlingView: NSViewRepresentable {
         view.onSendToBack = onSendToBack
         view.onSendToFront = onSendToFront
         view.onDeselect = onDeselect
-        DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
-        }
+        view.onAddSticker = onAddSticker
+        view.onAddTextSticker = onAddTextSticker
+        view.onToggleStickerList = onToggleStickerList
+        
+        // Ensure the view gets focus
+        
+
+        
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let keyView = nsView as? KeyCatcherView {
+            keyView.onDelete = onDelete
+            keyView.onMove = onMove
+            keyView.onResetRotation = onResetRotation
+            keyView.onClearAll = onClearAll
+            keyView.onSendBackward = onSendBackward
+            keyView.onSendForward = onSendForward
+            keyView.onSendToBack = onSendToBack
+            keyView.onSendToFront = onSendToFront
+            keyView.onDeselect = onDeselect
+            keyView.onAddSticker = onAddSticker
+            keyView.onAddTextSticker = onAddTextSticker
+            keyView.onToggleStickerList = onToggleStickerList
+        }
+    }
+    
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        // Clean up global monitor if needed
+        if nsView is KeyCatcherView {
+            // The global monitor will be cleaned up automatically
+        }
+    }
 
     class KeyCatcherView: NSView {
         var onDelete: (() -> Void)?
@@ -733,11 +782,26 @@ struct KeyEventHandlingView: NSViewRepresentable {
         var onSendToBack: (() -> Void)?
         var onSendToFront: (() -> Void)?
         var onDeselect: (() -> Void)?
+        var onAddSticker: (() -> Void)?
+        var onAddTextSticker: (() -> Void)?
+        var onToggleStickerList: (() -> Void)?
+        
         override var acceptsFirstResponder: Bool { true }
+        
+        override func becomeFirstResponder() -> Bool {
+            print("KeyCatcherView became first responder")
+            return super.becomeFirstResponder()
+        }
+        
+
+        
         override func keyDown(with event: NSEvent) {
             let shift = event.modifierFlags.contains(.shift)
             let command = event.modifierFlags.contains(.command)
             let increment: CGFloat = shift ? 40 : 10
+            
+            print("Key pressed: \(event.keyCode), Command: \(command), Shift: \(shift)")
+            
             switch event.keyCode {
             case 51: // delete/backspace
                 if command && shift {
@@ -755,6 +819,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 onMove?(0, -increment)
             case 15: // R key
                 if command && !shift {
+                    print("Command+R detected - resetting rotation")
                     onResetRotation?()
                 } else {
                     super.keyDown(with: event)
@@ -773,9 +838,101 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 }
             case 53: // Escape
                 onDeselect?()
+            case 0: // A key
+                if command && !shift {
+                    onAddSticker?()
+                } else {
+                    super.keyDown(with: event)
+                }
+            case 17: // T key
+                if command && !shift {
+                    onAddTextSticker?()
+                } else {
+                    super.keyDown(with: event)
+                }
+            case 37: // L key
+                if command && !shift {
+                    onToggleStickerList?()
+                } else {
+                    super.keyDown(with: event)
+                }
             default:
                 super.keyDown(with: event)
             }
+        }
+        
+        // Override to always handle key events, even when not first responder
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            let shift = event.modifierFlags.contains(.shift)
+            let command = event.modifierFlags.contains(.command)
+            let increment: CGFloat = shift ? 40 : 10
+            
+            print("Key equivalent: \(event.keyCode), Command: \(command), Shift: \(shift)")
+            
+            switch event.keyCode {
+            case 51: // delete/backspace
+                if command && shift {
+                    onClearAll?()
+                    return true
+                } else {
+                    onDelete?()
+                    return true
+                }
+            case 123: // left arrow
+                onMove?(-increment, 0)
+                return true
+            case 124: // right arrow
+                onMove?(increment, 0)
+                return true
+            case 125: // down arrow
+                onMove?(0, increment)
+                return true
+            case 126: // up arrow
+                onMove?(0, -increment)
+                return true
+            case 15: // R key
+                if command && !shift {
+                    print("Command+R detected - resetting rotation")
+                    onResetRotation?()
+                    return true
+                }
+            case 33: // [ key
+                if shift {
+                    onSendToBack?()
+                } else {
+                    onSendBackward?()
+                }
+                return true
+            case 30: // ] key
+                if shift {
+                    onSendToFront?()
+                } else {
+                    onSendForward?()
+                }
+                return true
+            case 53: // Escape
+                onDeselect?()
+                return true
+            case 0: // A key
+                if command && !shift {
+                    onAddSticker?()
+                    return true
+                }
+            case 17: // T key
+                if command && !shift {
+                    onAddTextSticker?()
+                    return true
+                }
+            case 37: // L key
+                if command && !shift {
+                    onToggleStickerList?()
+                    return true
+                }
+            default:
+                break
+            }
+            
+            return super.performKeyEquivalent(with: event)
         }
     }
 }
@@ -849,15 +1006,13 @@ struct PhotoStickerView: View {
                             .animation(.easeInOut(duration: 0.1), value: isDragging)
                         // Z-ordering buttons (bottom edge)
                         if isSelected {
-                            let proportional = sticker.size.height * 0.15
-                            let offset = min(max(proportional, 16), 48)
                             HStack(spacing: 8) {
                                 Button(action: onSendToBack) {
                                     Image(systemName: "chevron.down.2")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white)
                                         .frame(width: 24, height: 24)
-                                        .background(Color.gray.opacity(0.3))
+                                        .background(Color(hex: "#2e2e2e"))
                                         .clipShape(Circle())
                                 }
                                 .buttonStyle(.plain)
@@ -866,7 +1021,7 @@ struct PhotoStickerView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white)
                                         .frame(width: 24, height: 24)
-                                        .background(Color.gray.opacity(0.3))
+                                        .background(Color(hex: "#2e2e2e"))
                                         .clipShape(Circle())
                                 }
                                 .buttonStyle(.plain)
@@ -875,7 +1030,7 @@ struct PhotoStickerView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white)
                                         .frame(width: 24, height: 24)
-                                        .background(Color.gray.opacity(0.3))
+                                        .background(Color(hex: "#2e2e2e"))
                                         .clipShape(Circle())
                                 }
                                 .buttonStyle(.plain)
@@ -884,7 +1039,7 @@ struct PhotoStickerView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white)
                                         .frame(width: 24, height: 24)
-                                        .background(Color.gray.opacity(0.3))
+                                        .background(Color(hex: "#2e2e2e"))
                                         .clipShape(Circle())
                                 }
                                 .buttonStyle(.plain)
@@ -922,13 +1077,37 @@ struct PhotoStickerView: View {
                             .stroke(Color.white, lineWidth: 4)
                     )
             }
-            // Rotation handle at bottom right (not rotated)
+            // Scroll wheel rotation and reset button (when selected)
             if isSelected {
-                RotationHandle(
-                    currentRotation: sticker.rotation,
-                    onRotate: onRotate
-                )
-                .offset(x: 0, y: 0)
+                ZStack {
+                    // Scroll wheel rotation area
+                    ScrollWheelRotationView(
+                        onRotate: onRotate,
+                        currentRotation: sticker.rotation
+                    )
+                    .frame(width: sticker.size.width + 40, height: sticker.size.height + 40)
+                    
+                    // Reset rotation button (top-left corner)
+                    VStack {
+                        HStack {
+                            Button(action: {
+                                onRotate(0)
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 20, height: 20)
+                                    .background(Color.orange)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .frame(width: sticker.size.width + 40, height: sticker.size.height + 40)
+                }
+                .offset(x: -20, y: -20)
             }
         }
         .position(sticker.position)
@@ -952,44 +1131,37 @@ struct PhotoStickerView: View {
     }
 }
 
-struct RotationHandle: View {
-    let currentRotation: Double
+
+struct ScrollWheelRotationView: NSViewRepresentable {
     let onRotate: (Double) -> Void
+    let currentRotation: Double
     
-    @State private var isHovering = false
-    @State private var startAngle: Double = 0
+    func makeNSView(context: Context) -> NSView {
+        let view = ScrollWheelView()
+        view.onRotate = onRotate
+        view.currentRotation = currentRotation
+        return view
+    }
     
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(isHovering ? Color.blue : Color.gray)
-                .frame(width: 24, height: 24)
-                .shadow(radius: isHovering ? 6 : 2)
-            Image(systemName: "rotate.3d")
-                .foregroundColor(.white)
-                .font(.system(size: 12, weight: .bold))
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let scrollView = nsView as? ScrollWheelView {
+            scrollView.onRotate = onRotate
+            scrollView.currentRotation = currentRotation
         }
-        .onHover { hovering in
-            isHovering = hovering
+    }
+    
+    class ScrollWheelView: NSView {
+        var onRotate: ((Double) -> Void)?
+        var currentRotation: Double = 0
+        
+        override var acceptsFirstResponder: Bool { true }
+        
+        override func scrollWheel(with event: NSEvent) {
+            let delta = event.deltaY
+            let rotationIncrement: Double = 5.0 // 5 degrees per scroll unit
+            let newRotation = currentRotation - (Double(delta) * rotationIncrement)
+            onRotate?(newRotation)
         }
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    let center = CGPoint(x: 12, y: 12) // Center of the 24x24 circle
-                    let currentPoint = CGPoint(x: value.location.x, y: value.location.y)
-                    let angle = atan2(currentPoint.y - center.y, currentPoint.x - center.x) * 180.0 / Double.pi
-                    
-                    if startAngle == 0 {
-                        startAngle = angle - currentRotation
-                    }
-                    
-                    let newRotation = angle - startAngle
-                    onRotate(newRotation)
-                }
-                .onEnded { _ in
-                    startAngle = 0
-                }
-        )
     }
 }
 
@@ -1018,16 +1190,16 @@ struct ResizeSideHandle: View {
     }
 }
 
-// MARK: - Color Picker Modal
 
-struct ColorPickerModal: View {
+
+// MARK: - Color Picker Overlay
+
+struct ColorPickerOverlay: View {
     @Binding var backgroundColor: Color
-    @Binding var isPresented: Bool
     let onConfirm: () -> Void
     let onCancel: () -> Void
     
-    @State private var backgroundOpacity: Double = 0
-    @State private var modalOpacity: Double = 0
+    @State private var tempBackgroundColor: Color
     
     private let graySwatches: [Color] = [
         Color(hex: "#1e1e1e"), // Darkest
@@ -1037,83 +1209,63 @@ struct ColorPickerModal: View {
         Color(hex: "#fafafa")  // Lightest
     ]
     
+    init(backgroundColor: Binding<Color>, onConfirm: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        self._backgroundColor = backgroundColor
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+        self._tempBackgroundColor = State(initialValue: backgroundColor.wrappedValue)
+    }
+    
     var body: some View {
-        ZStack {
-            // Background overlay
-            Color.black.opacity(backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    onCancel()
-                }
-            
-            // Modal content
-            VStack(spacing: 20) {
-                VStack(spacing: 2) {
-                    ForEach(0..<graySwatches.count, id: \.self) { index in
-                        Button(action: {
-                            backgroundColor = graySwatches[index]
-                        }) {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(graySwatches[index])
-                                .frame(width: 150, height: 40)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(backgroundColor == graySwatches[index] ? Color.blue : Color.clear, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                // Color squares
+                ForEach(0..<graySwatches.count, id: \.self) { index in
+                    Button(action: {
+                        tempBackgroundColor = graySwatches[index]
+                    }) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(graySwatches[index])
+                            .frame(width: 30, height: 30)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(tempBackgroundColor == graySwatches[index] ? Color.blue : (index == 0 ? Color.gray.opacity(0.5) : Color.clear), lineWidth: index == 0 ? 1 : 2)
+                            )
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.top, 40)
                 
-                HStack(spacing: 20) {
-                    // Confirm button (checkmark)
-                    Button(action: onConfirm) {
-                        Image(systemName: "checkmark")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.black)
-                            .frame(width: 32, height: 32)
-                            .background(Color.white)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // Cancel button (X)
-                    Button(action: onCancel) {
-                        Image(systemName: "xmark")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Color.black)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
+                // Confirm button (checkmark)
+                Button(action: {
+                    backgroundColor = tempBackgroundColor
+                    onConfirm()
+                }) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.black)
+                        .frame(width: 24, height: 24)
+                        .background(Color.white)
+                        .clipShape(Circle())
                 }
-                .padding(.bottom, 20)
-            }
-            .frame(width: 280)
-            .background(Color.black)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .circular))
-            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-            .opacity(modalOpacity)
-        }
-        .onChange(of: isPresented) {
-            if isPresented {
-                // Show modal
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    backgroundOpacity = 0.5
-                    modalOpacity = 1
+                .buttonStyle(.plain)
+                
+                // Cancel button (X)
+                Button(action: {
+                    tempBackgroundColor = backgroundColor
+                    onCancel()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(width: 24, height: 24)
+                        .background(Color(hex: "#2e2e2e"))
+                        .clipShape(Circle())
                 }
-            } else {
-                // Hide modal
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    backgroundOpacity = 0
-                    modalOpacity = 0
-                }
+                .buttonStyle(.plain)
             }
         }
+        .padding(.top, 20)
+        .padding(.leading, 20)
     }
 }
 
@@ -1184,9 +1336,6 @@ struct TextStickerView: View {
                 .font(.system(size: textSticker.fontSize))
                 .foregroundColor(textSticker.textColor)
                 .multilineTextAlignment(.center)
-                .onAppear {
-                    editedText = textSticker.text
-                }
             } else {
                 ZStack {
                     // White stroke (background)
@@ -1203,6 +1352,7 @@ struct TextStickerView: View {
                         .multilineTextAlignment(.center)
                 }
                 .onTapGesture(count: 2) {
+                    editedText = textSticker.text
                     isEditing = true
                 }
             }
@@ -1219,7 +1369,7 @@ struct TextStickerView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white)
                                     .frame(width: 24, height: 24)
-                                    .background(Color.gray.opacity(0.3))
+                                    .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -1230,7 +1380,7 @@ struct TextStickerView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white)
                                     .frame(width: 24, height: 24)
-                                    .background(Color.gray.opacity(0.3))
+                                    .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -1241,7 +1391,7 @@ struct TextStickerView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white)
                                     .frame(width: 24, height: 24)
-                                    .background(Color.gray.opacity(0.3))
+                                    .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -1252,7 +1402,7 @@ struct TextStickerView: View {
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white)
                                     .frame(width: 24, height: 24)
-                                    .background(Color.gray.opacity(0.3))
+                                    .background(Color(hex: "#2e2e2e"))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -1273,12 +1423,36 @@ struct TextStickerView: View {
                 )
                 .offset(x: textSize().width / 2 + 12, y: 0)
                 
-                // Rotation handle at center
-                RotationHandle(
-                    currentRotation: textSticker.rotation,
-                    onRotate: onRotate
-                )
-                .offset(x: 0, y: 0)
+                // Scroll wheel rotation and reset button (when selected)
+                ZStack {
+                    // Scroll wheel rotation area
+                    ScrollWheelRotationView(
+                        onRotate: onRotate,
+                        currentRotation: textSticker.rotation
+                    )
+                    .frame(width: textSize().width + 40, height: textSize().height + 40)
+                    
+                    // Reset rotation button (top-left corner)
+                    VStack {
+                        HStack {
+                            Button(action: {
+                                onRotate(0)
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(width: 20, height: 20)
+                                    .background(Color.orange)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .frame(width: textSize().width + 40, height: textSize().height + 40)
+                }
+                .offset(x: -20, y: -20)
             }
         }
         .position(textSticker.position)
