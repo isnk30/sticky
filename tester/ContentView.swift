@@ -16,11 +16,20 @@ struct PhotoSticker: Identifiable {
     var size: CGSize
     var rotation: Double
     
+    // Cached image for performance
+    var cachedImage: NSImage?
+    
     init(imageData: Data, position: CGPoint = CGPoint(x: 100, y: 100), size: CGSize = CGSize(width: 150, height: 150), rotation: Double = 0) {
         self.imageData = imageData
         self.position = position
         self.size = size
         self.rotation = rotation
+        self.cachedImage = NSImage(data: imageData)
+    }
+    
+    // Clear cache when image data changes
+    mutating func clearImageCache() {
+        cachedImage = NSImage(data: imageData)
     }
 }
 
@@ -33,6 +42,9 @@ struct TextSticker: Identifiable {
     var fontSize: CGFloat
     var textColor: Color
     
+    // Cached text size for performance
+    var cachedTextSize: CGSize
+    
     init(text: String = "Text", position: CGPoint = CGPoint(x: 100, y: 100), size: CGSize = CGSize(width: 150, height: 50), rotation: Double = 0, fontSize: CGFloat = 24, textColor: Color = .black) {
         self.text = text
         self.position = position
@@ -40,6 +52,20 @@ struct TextSticker: Identifiable {
         self.rotation = rotation
         self.fontSize = fontSize
         self.textColor = textColor
+        
+        // Calculate initial text size
+        let font = NSFont.systemFont(ofSize: fontSize)
+        let attributes = [NSAttributedString.Key.font: font]
+        let size = (text as NSString).size(withAttributes: attributes)
+        self.cachedTextSize = CGSize(width: size.width + 20, height: size.height + 10)
+    }
+    
+    // Update cache when text or font size changes
+    mutating func updateTextCache() {
+        let font = NSFont.systemFont(ofSize: fontSize)
+        let attributes = [NSAttributedString.Key.font: font]
+        let size = (text as NSString).size(withAttributes: attributes)
+        cachedTextSize = CGSize(width: size.width + 20, height: size.height + 10)
     }
 }
 
@@ -65,31 +91,66 @@ struct ContentView: View {
     @State private var showListTooltip = false
     @State private var listButtonHoverTimer: Timer?
     
+    // Performance optimization: Dictionary for faster lookups
+    @State private var stickerIndices: [UUID: Int] = [:]
+    @State private var textStickerIndices: [UUID: Int] = [:]
+    
+    // Performance optimization: Debounced drag updates
+    @State private var lastDragUpdate: Date = Date()
+    private let dragUpdateInterval: TimeInterval = 1.0 / 60.0 // 60 FPS max
+    
+    // Update indices when arrays change
+    private func updateStickerIndices() {
+        stickerIndices.removeAll()
+        for (index, sticker) in stickers.enumerated() {
+            stickerIndices[sticker.id] = index
+        }
+    }
+    
+    private func updateTextStickerIndices() {
+        textStickerIndices.removeAll()
+        for (index, textSticker) in textStickers.enumerated() {
+            textStickerIndices[textSticker.id] = index
+        }
+    }
+    
+    // Performance optimization: Throttle drag updates
+    private func shouldUpdateDrag() -> Bool {
+        let now = Date()
+        if now.timeIntervalSince(lastDragUpdate) >= dragUpdateInterval {
+            lastDragUpdate = now
+            return true
+        }
+        return false
+    }
+    
     var body: some View {
         ZStack {
             KeyEventHandlingView(
                 onDelete: {
-                    if let selected = selectedSticker {
-                        stickers.removeAll { $0.id == selected.id }
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id] {
+                        stickers.remove(at: idx)
                         selectedSticker = nil
-                    } else if let selected = selectedTextSticker {
-                        textStickers.removeAll { $0.id == selected.id }
+                        updateStickerIndices()
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id] {
+                        textStickers.remove(at: idx)
                         selectedTextSticker = nil
+                        updateTextStickerIndices()
                     }
                 },
                 onMove: { dx, dy in
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id] {
                         let old = stickers[idx].position
                         stickers[idx].position = CGPoint(x: old.x + dx, y: old.y + dy)
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id] {
                         let old = textStickers[idx].position
                         textStickers[idx].position = CGPoint(x: old.x + dx, y: old.y + dy)
                     }
                 },
                 onResetRotation: {
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id] {
                         stickers[idx].rotation = 0
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id] {
                         textStickers[idx].rotation = 0
                     }
                 },
@@ -100,39 +161,47 @@ struct ContentView: View {
                     selectedTextSticker = nil
                 },
                 onSendBackward: {
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }), idx > 0 {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id], idx > 0 {
                         let sticker = stickers.remove(at: idx)
                         stickers.insert(sticker, at: idx - 1)
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }), idx > 0 {
+                        updateStickerIndices()
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id], idx > 0 {
                         let textSticker = textStickers.remove(at: idx)
                         textStickers.insert(textSticker, at: idx - 1)
+                        updateTextStickerIndices()
                     }
                 },
                 onSendForward: {
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }), idx < stickers.count - 1 {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id], idx < stickers.count - 1 {
                         let sticker = stickers.remove(at: idx)
                         stickers.insert(sticker, at: idx + 1)
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }), idx < textStickers.count - 1 {
+                        updateStickerIndices()
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id], idx < textStickers.count - 1 {
                         let textSticker = textStickers.remove(at: idx)
                         textStickers.insert(textSticker, at: idx + 1)
+                        updateTextStickerIndices()
                     }
                 },
                 onSendToBack: {
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id] {
                         let sticker = stickers.remove(at: idx)
                         stickers.insert(sticker, at: 0)
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        updateStickerIndices()
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id] {
                         let textSticker = textStickers.remove(at: idx)
                         textStickers.insert(textSticker, at: 0)
+                        updateTextStickerIndices()
                     }
                 },
                 onSendToFront: {
-                    if let selected = selectedSticker, let idx = stickers.firstIndex(where: { $0.id == selected.id }) {
+                    if let selected = selectedSticker, let idx = stickerIndices[selected.id] {
                         let sticker = stickers.remove(at: idx)
                         stickers.append(sticker)
-                    } else if let selected = selectedTextSticker, let idx = textStickers.firstIndex(where: { $0.id == selected.id }) {
+                        updateStickerIndices()
+                    } else if let selected = selectedTextSticker, let idx = textStickerIndices[selected.id] {
                         let textSticker = textStickers.remove(at: idx)
                         textStickers.append(textSticker)
+                        updateTextStickerIndices()
                     }
                 },
                 onDeselect: {
@@ -150,6 +219,7 @@ struct ContentView: View {
                         position: CGPoint(x: centerX, y: centerY)
                     )
                     textStickers.append(newTextSticker)
+                    updateTextStickerIndices()
                     selectedTextSticker = newTextSticker
                     selectedSticker = nil
                 },
@@ -178,30 +248,29 @@ struct ContentView: View {
                                 selectedSticker = sticker 
                             },
                             onDragChanged: { value in
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                        // Get the drag start position for this sticker
-                                        let startPosition = dragStartPositions[sticker.id] ?? sticker.position
-                                        
-                                        // Use the drag start position plus current translation for more predictable movement
-                                        let newX = startPosition.x + value.translation.width
-                                        let newY = startPosition.y + value.translation.height
-                                        
-                                        // Get the actual sticker dimensions
-                                        let stickerWidth = sticker.size.width
-                                        let stickerHeight = sticker.size.height
-                                        
-                                        // Apply boundary constraints using actual view dimensions
-                                        let minX = stickerWidth / 2
-                                        let maxX = geometry.size.width - stickerWidth / 2
-                                        let minY = stickerHeight / 2
-                                        let maxY = geometry.size.height - stickerHeight / 2
-                                        
-                                        let constrainedX = max(minX, min(maxX, newX))
-                                        let constrainedY = max(minY, min(maxY, newY))
-                                        
-                                        stickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
-                                    }
+                                guard shouldUpdateDrag() else { return }
+                                if let index = stickerIndices[sticker.id] {
+                                    // Get the drag start position for this sticker
+                                    let startPosition = dragStartPositions[sticker.id] ?? sticker.position
+                                    
+                                    // Use the drag start position plus current translation for more predictable movement
+                                    let newX = startPosition.x + value.translation.width
+                                    let newY = startPosition.y + value.translation.height
+                                    
+                                    // Get the actual sticker dimensions
+                                    let stickerWidth = sticker.size.width
+                                    let stickerHeight = sticker.size.height
+                                    
+                                    // Apply boundary constraints using actual view dimensions
+                                    let minX = stickerWidth / 2
+                                    let maxX = geometry.size.width - stickerWidth / 2
+                                    let minY = stickerHeight / 2
+                                    let maxY = geometry.size.height - stickerHeight / 2
+                                    
+                                    let constrainedX = max(minX, min(maxX, newX))
+                                    let constrainedY = max(minY, min(maxY, newY))
+                                    
+                                    stickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
                                 }
                             },
                             onDragStart: {
@@ -211,49 +280,41 @@ struct ContentView: View {
                                 dragStartPositions.removeValue(forKey: sticker.id)
                             },
                             onResize: { newSize in
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                        stickers[index].size = newSize
-                                    }
+                                if let index = stickerIndices[sticker.id] {
+                                    stickers[index].size = newSize
                                 }
                             },
                             onRotate: { newRotation in
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                        stickers[index].rotation = newRotation
-                                    }
+                                if let index = stickerIndices[sticker.id] {
+                                    stickers[index].rotation = newRotation
                                 }
                             },
                             onSendToBack: {
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                        let sticker = stickers.remove(at: index)
-                                        stickers.insert(sticker, at: 0)
-                                    }
+                                if let index = stickerIndices[sticker.id] {
+                                    let sticker = stickers.remove(at: index)
+                                    stickers.insert(sticker, at: 0)
+                                    updateStickerIndices()
                                 }
                             },
                             onSendBackward: {
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }), index > 0 {
-                                        let sticker = stickers.remove(at: index)
-                                        stickers.insert(sticker, at: index - 1)
-                                    }
+                                if let index = stickerIndices[sticker.id], index > 0 {
+                                    let sticker = stickers.remove(at: index)
+                                    stickers.insert(sticker, at: index - 1)
+                                    updateStickerIndices()
                                 }
                             },
                             onMoveForward: {
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }), index < stickers.count - 1 {
-                                        let sticker = stickers.remove(at: index)
-                                        stickers.insert(sticker, at: index + 1)
-                                    }
+                                if let index = stickerIndices[sticker.id], index < stickers.count - 1 {
+                                    let sticker = stickers.remove(at: index)
+                                    stickers.insert(sticker, at: index + 1)
+                                    updateStickerIndices()
                                 }
                             },
                             onMoveToFront: {
-                                withAnimation(.none) {
-                                    if let index = stickers.firstIndex(where: { $0.id == sticker.id }) {
-                                        let sticker = stickers.remove(at: index)
-                                        stickers.append(sticker)
-                                    }
+                                if let index = stickerIndices[sticker.id] {
+                                    let sticker = stickers.remove(at: index)
+                                    stickers.append(sticker)
+                                    updateStickerIndices()
                                 }
                             }
                         )
@@ -268,22 +329,21 @@ struct ContentView: View {
                                 selectedTextSticker = textSticker 
                             },
                             onDragChanged: { value in
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
-                                        let startPosition = dragStartPositions[textSticker.id] ?? textSticker.position
-                                        let newX = startPosition.x + value.translation.width
-                                        let newY = startPosition.y + value.translation.height
-                                        
-                                        let minX = textSticker.size.width / 2
-                                        let maxX = geometry.size.width - textSticker.size.width / 2
-                                        let minY = textSticker.size.height / 2
-                                        let maxY = geometry.size.height - textSticker.size.height / 2
-                                        
-                                        let constrainedX = max(minX, min(maxX, newX))
-                                        let constrainedY = max(minY, min(maxY, newY))
-                                        
-                                        textStickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
-                                    }
+                                guard shouldUpdateDrag() else { return }
+                                if let index = textStickerIndices[textSticker.id] {
+                                    let startPosition = dragStartPositions[textSticker.id] ?? textSticker.position
+                                    let newX = startPosition.x + value.translation.width
+                                    let newY = startPosition.y + value.translation.height
+                                    
+                                    let minX = textSticker.size.width / 2
+                                    let maxX = geometry.size.width - textSticker.size.width / 2
+                                    let minY = textSticker.size.height / 2
+                                    let maxY = geometry.size.height - textSticker.size.height / 2
+                                    
+                                    let constrainedX = max(minX, min(maxX, newX))
+                                    let constrainedY = max(minY, min(maxY, newY))
+                                    
+                                    textStickers[index].position = CGPoint(x: constrainedX, y: constrainedY)
                                 }
                             },
                             onDragStart: {
@@ -293,59 +353,53 @@ struct ContentView: View {
                                 dragStartPositions.removeValue(forKey: textSticker.id)
                             },
                             onResize: { newSize in
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
-                                        textStickers[index].size = newSize
-                                    }
+                                if let index = textStickerIndices[textSticker.id] {
+                                    textStickers[index].size = newSize
                                 }
                             },
                             onRotate: { newRotation in
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
-                                        textStickers[index].rotation = newRotation
-                                    }
+                                if let index = textStickerIndices[textSticker.id] {
+                                    textStickers[index].rotation = newRotation
                                 }
                             },
                             onTextChange: { newText in
-                                if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
+                                if let index = textStickerIndices[textSticker.id] {
                                     textStickers[index].text = newText
+                                    textStickers[index].updateTextCache()
                                 }
                             },
                             onFontSizeChange: { newFontSize in
-                                if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
+                                if let index = textStickerIndices[textSticker.id] {
                                     textStickers[index].fontSize = newFontSize
+                                    textStickers[index].updateTextCache()
                                 }
                             },
                             onSendToBack: {
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
-                                        let textSticker = textStickers.remove(at: index)
-                                        textStickers.insert(textSticker, at: 0)
-                                    }
+                                if let index = textStickerIndices[textSticker.id] {
+                                    let textSticker = textStickers.remove(at: index)
+                                    textStickers.insert(textSticker, at: 0)
+                                    updateTextStickerIndices()
                                 }
                             },
                             onSendBackward: {
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }), index > 0 {
-                                        let textSticker = textStickers.remove(at: index)
-                                        textStickers.insert(textSticker, at: index - 1)
-                                    }
+                                if let index = textStickerIndices[textSticker.id], index > 0 {
+                                    let textSticker = textStickers.remove(at: index)
+                                    textStickers.insert(textSticker, at: index - 1)
+                                    updateTextStickerIndices()
                                 }
                             },
                             onMoveForward: {
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }), index < textStickers.count - 1 {
-                                        let textSticker = textStickers.remove(at: index)
-                                        textStickers.insert(textSticker, at: index + 1)
-                                    }
+                                if let index = textStickerIndices[textSticker.id], index < textStickers.count - 1 {
+                                    let textSticker = textStickers.remove(at: index)
+                                    textStickers.insert(textSticker, at: index + 1)
+                                    updateTextStickerIndices()
                                 }
                             },
                             onMoveToFront: {
-                                withAnimation(.none) {
-                                    if let index = textStickers.firstIndex(where: { $0.id == textSticker.id }) {
-                                        let textSticker = textStickers.remove(at: index)
-                                        textStickers.append(textSticker)
-                                    }
+                                if let index = textStickerIndices[textSticker.id] {
+                                    let textSticker = textStickers.remove(at: index)
+                                    textStickers.append(textSticker)
+                                    updateTextStickerIndices()
                                 }
                             }
                         )
@@ -490,6 +544,7 @@ struct ContentView: View {
                                     position: CGPoint(x: centerX, y: centerY)
                                 )
                                 textStickers.append(newTextSticker)
+                                updateTextStickerIndices()
                                 selectedTextSticker = newTextSticker
                                 selectedSticker = nil
                             }) {
@@ -653,6 +708,14 @@ struct ContentView: View {
                 }
                 .onAppear {
                     viewSize = geometry.size
+                    updateStickerIndices()
+                    updateTextStickerIndices()
+                }
+                .onChange(of: stickers.count) {
+                    updateStickerIndices()
+                }
+                .onChange(of: textStickers.count) {
+                    updateTextStickerIndices()
                 }
                 .contextMenu {
                     Button("Change Color") {
@@ -685,6 +748,7 @@ struct ContentView: View {
                             position: CGPoint(x: centerX, y: centerY)
                         )
                         stickers.append(newSticker)
+                        updateStickerIndices()
                     }
                 }
             case .failure(let error):
@@ -693,6 +757,20 @@ struct ContentView: View {
         }
         .overlay(
             VStack {
+                // Instruction text at the top when a sticker is selected
+                if selectedSticker != nil || selectedTextSticker != nil {
+                    Text("⌘R to reset rotation")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.1))
+                        .cornerRadius(20)
+                        .padding(.top, 20)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: selectedSticker != nil || selectedTextSticker != nil)
+                }
+                
                 if showColorPicker {
                     ColorPickerOverlay(
                         backgroundColor: $backgroundColor,
@@ -706,7 +784,7 @@ struct ContentView: View {
                 }
                 Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         )
     }
 }
@@ -944,29 +1022,27 @@ struct GridBackground: View {
             let rows = Int(size.height / gridSize)
             let cols = Int(size.width / gridSize)
             
+            // Use a single path for all lines to reduce draw calls
+            var horizontalPath = Path()
+            var verticalPath = Path()
+            
             for row in 0...rows {
                 let y = CGFloat(row) * gridSize
-                context.stroke(
-                    Path { path in
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: size.width, y: y))
-                    },
-                    with: .color(.gray.opacity(0.1)),
-                    lineWidth: 0.5
-                )
+                horizontalPath.move(to: CGPoint(x: 0, y: y))
+                horizontalPath.addLine(to: CGPoint(x: size.width, y: y))
             }
             
             for col in 0...cols {
                 let x = CGFloat(col) * gridSize
-                context.stroke(
-                    Path { path in
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: size.height))
-                    },
-                    with: .color(.gray.opacity(0.1)),
-                    lineWidth: 0.5
-                )
+                verticalPath.move(to: CGPoint(x: x, y: 0))
+                verticalPath.addLine(to: CGPoint(x: x, y: size.height))
             }
+            
+            // Draw all horizontal lines at once
+            context.stroke(horizontalPath, with: .color(.gray.opacity(0.08)), lineWidth: 0.5)
+            
+            // Draw all vertical lines at once
+            context.stroke(verticalPath, with: .color(.gray.opacity(0.08)), lineWidth: 0.5)
         }
     }
 }
@@ -990,7 +1066,7 @@ struct PhotoStickerView: View {
     
     var body: some View {
         ZStack {
-            if let nsImage = NSImage(data: sticker.imageData) {
+            if let nsImage = sticker.cachedImage {
                 ZStack {
                     // Rotated content
                     ZStack {
@@ -1001,9 +1077,9 @@ struct PhotoStickerView: View {
                             .background(Color.white)
                             .clipShape(Rectangle())
                             .frame(width: sticker.size.width, height: sticker.size.height)
-                            .shadow(color: .black.opacity(isDragging ? 0.5 : 0.3), radius: isSelected ? 8 : 4, x: 0, y: isDragging ? 4 : 2)
-                            .scaleEffect(isDragging ? 1.05 : 1.0)
-                            .animation(.easeInOut(duration: 0.1), value: isDragging)
+                            .shadow(color: .black.opacity(isDragging ? 0.3 : 0.2), radius: isSelected ? 6 : 3, x: 0, y: isDragging ? 2 : 1)
+                            .scaleEffect(isDragging ? 1.02 : 1.0)
+                            .animation(.easeInOut(duration: 0.05), value: isDragging)
                         // Z-ordering buttons (bottom edge)
                         if isSelected {
                             HStack(spacing: 8) {
@@ -1318,13 +1394,6 @@ struct TextStickerView: View {
     @State private var isEditing: Bool = false
     @State private var editedText: String = ""
     
-    private func textSize() -> CGSize {
-        let font = NSFont.systemFont(ofSize: textSticker.fontSize)
-        let attributes = [NSAttributedString.Key.font: font]
-        let size = (textSticker.text as NSString).size(withAttributes: attributes)
-        return CGSize(width: size.width + 20, height: size.height + 10) // Add some padding
-    }
-    
     var body: some View {
         ZStack {
             // Text content
@@ -1338,12 +1407,12 @@ struct TextStickerView: View {
                 .multilineTextAlignment(.center)
             } else {
                 ZStack {
-                    // White stroke (background)
+                    // White stroke (background) - simplified for performance
                     Text(textSticker.text)
                         .font(.system(size: textSticker.fontSize))
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
-                        .blur(radius: 0.5)
+                        .blur(radius: 0.3)
                     
                     // Main text
                     Text(textSticker.text)
@@ -1421,7 +1490,7 @@ struct TextStickerView: View {
                         onFontSizeChange(newFontSize)
                     }
                 )
-                .offset(x: textSize().width / 2 + 12, y: 0)
+                .offset(x: textSticker.cachedTextSize.width / 2 + 12, y: 0)
                 
                 // Scroll wheel rotation and reset button (when selected)
                 ZStack {
@@ -1430,7 +1499,7 @@ struct TextStickerView: View {
                         onRotate: onRotate,
                         currentRotation: textSticker.rotation
                     )
-                    .frame(width: textSize().width + 40, height: textSize().height + 40)
+                    .frame(width: textSticker.cachedTextSize.width + 40, height: textSticker.cachedTextSize.height + 40)
                     
                     // Reset rotation button (top-left corner)
                     VStack {
@@ -1450,7 +1519,7 @@ struct TextStickerView: View {
                         }
                         Spacer()
                     }
-                    .frame(width: textSize().width + 40, height: textSize().height + 40)
+                    .frame(width: textSticker.cachedTextSize.width + 40, height: textSticker.cachedTextSize.height + 40)
                 }
                 .offset(x: -20, y: -20)
             }

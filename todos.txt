@@ -1,7 +1,0 @@
-- save and export functionallity
-- better designed sticker list
-- better roation ui
-- performance
-- fix everything about text stickers
-- add tooltip to "list stickers" btn
-- undo and redo
