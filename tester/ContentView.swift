@@ -90,6 +90,7 @@ struct ContentView: View {
     @State private var showStickerList = false
     @State private var showListTooltip = false
     @State private var listButtonHoverTimer: Timer?
+    @State private var showToolbarButtons = false
     
     // Performance optimization: Dictionary for faster lookups
     @State private var stickerIndices: [UUID: Int] = [:]
@@ -225,6 +226,9 @@ struct ContentView: View {
                 },
                 onToggleStickerList: {
                     showStickerList.toggle()
+                },
+                onDismissColorPicker: {
+                    showColorPicker = false
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -237,7 +241,7 @@ struct ContentView: View {
                         .ignoresSafeArea()
                     
                     // Grid background for visual reference
-                    GridBackground()
+                    GridBackground(backgroundColor: backgroundColor)
                     
                     // Photo stickers
                     ForEach(stickers) { sticker in
@@ -455,14 +459,15 @@ struct ContentView: View {
                                     }
                                 }
                             )
-                            .popover(isPresented: $showStickerList, arrowEdge: .bottom) {
+                            .popover(isPresented: $showStickerList, arrowEdge: .top) {
                                 VStack(alignment: .leading, spacing: 12) {
                                     Text("Stickers: \(stickers.count)")
                                         .font(.headline)
                                         .padding(.top, 8)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     ScrollView {
                                         VStack(alignment: .leading, spacing: 8) {
-                                            ForEach(stickers) { sticker in
+                                            ForEach(Array(stickers.enumerated()), id: \.element.id) { index, sticker in
                                                 HStack(spacing: 8) {
                                                     if let nsImage = NSImage(data: sticker.imageData) {
                                                         Image(nsImage: nsImage)
@@ -472,9 +477,29 @@ struct ContentView: View {
                                                             .cornerRadius(4)
                                                             .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3), lineWidth: 1))
                                                     }
-                                                    Text("Sticker")
+                                                    Text("image_\(index)")
                                                         .font(.subheadline)
                                                         .foregroundColor(.primary)
+                                                    Spacer()
+                                                    Button(action: {
+                                                        stickers.remove(at: index)
+                                                        if selectedSticker?.id == sticker.id {
+                                                            selectedSticker = nil
+                                                        }
+                                                        updateStickerIndices()
+                                                    }) {
+                                                        Image(systemName: "trash")
+                                                            .foregroundColor(.white)
+                                                            .font(.caption)
+                                                    }
+                                                    .buttonStyle(PlainButtonStyle())
+                                                }
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .contentShape(Rectangle())
+                                                .onTapGesture {
+                                                    selectedSticker = sticker
+                                                    selectedTextSticker = nil
+                                                    showStickerList = false
                                                 }
                                             }
                                         }
@@ -484,8 +509,11 @@ struct ContentView: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
-                                .frame(width: 200)
+                                .frame(width: 200, alignment: .leading)
+                                .padding(.leading, -2)
                             }
+                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.05), value: showToolbarButtons)
                             
                             Spacer()
                             
@@ -535,6 +563,8 @@ struct ContentView: View {
                                     }
                                 }
                             )
+                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.10), value: showToolbarButtons)
                             
                             Button(action: {
                                 let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
@@ -590,6 +620,8 @@ struct ContentView: View {
                                     }
                                 }
                             )
+                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.15), value: showToolbarButtons)
                             
                             Button(action: {
                                 if let selected = selectedSticker {
@@ -643,6 +675,8 @@ struct ContentView: View {
                                     }
                                 }
                             )
+                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.20), value: showToolbarButtons)
                             
                             Spacer()
                             
@@ -695,6 +729,8 @@ struct ContentView: View {
                                     }
                                 }
                             )
+                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.25), value: showToolbarButtons)
                             .padding(.trailing, 20)
                         }
                         .padding()
@@ -710,6 +746,7 @@ struct ContentView: View {
                     viewSize = geometry.size
                     updateStickerIndices()
                     updateTextStickerIndices()
+                    showToolbarButtons = true
                 }
                 .onChange(of: stickers.count) {
                     updateStickerIndices()
@@ -804,6 +841,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
     var onAddSticker: () -> Void
     var onAddTextSticker: () -> Void
     var onToggleStickerList: () -> Void
+    var onDismissColorPicker: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = KeyCatcherView()
@@ -819,6 +857,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
         view.onAddSticker = onAddSticker
         view.onAddTextSticker = onAddTextSticker
         view.onToggleStickerList = onToggleStickerList
+        view.onDismissColorPicker = onDismissColorPicker
         
         // Ensure the view gets focus
         
@@ -840,6 +879,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
             keyView.onAddSticker = onAddSticker
             keyView.onAddTextSticker = onAddTextSticker
             keyView.onToggleStickerList = onToggleStickerList
+            keyView.onDismissColorPicker = onDismissColorPicker
         }
     }
     
@@ -863,11 +903,11 @@ struct KeyEventHandlingView: NSViewRepresentable {
         var onAddSticker: (() -> Void)?
         var onAddTextSticker: (() -> Void)?
         var onToggleStickerList: (() -> Void)?
+        var onDismissColorPicker: (() -> Void)?
         
         override var acceptsFirstResponder: Bool { true }
         
         override func becomeFirstResponder() -> Bool {
-            print("KeyCatcherView became first responder")
             return super.becomeFirstResponder()
         }
         
@@ -877,8 +917,6 @@ struct KeyEventHandlingView: NSViewRepresentable {
             let shift = event.modifierFlags.contains(.shift)
             let command = event.modifierFlags.contains(.command)
             let increment: CGFloat = shift ? 40 : 10
-            
-            print("Key pressed: \(event.keyCode), Command: \(command), Shift: \(shift)")
             
             switch event.keyCode {
             case 51: // delete/backspace
@@ -897,7 +935,6 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 onMove?(0, -increment)
             case 15: // R key
                 if command && !shift {
-                    print("Command+R detected - resetting rotation")
                     onResetRotation?()
                 } else {
                     super.keyDown(with: event)
@@ -915,6 +952,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
                     onSendForward?()
                 }
             case 53: // Escape
+                onDismissColorPicker?()
                 onDeselect?()
             case 0: // A key
                 if command && !shift {
@@ -945,8 +983,6 @@ struct KeyEventHandlingView: NSViewRepresentable {
             let command = event.modifierFlags.contains(.command)
             let increment: CGFloat = shift ? 40 : 10
             
-            print("Key equivalent: \(event.keyCode), Command: \(command), Shift: \(shift)")
-            
             switch event.keyCode {
             case 51: // delete/backspace
                 if command && shift {
@@ -970,7 +1006,6 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 return true
             case 15: // R key
                 if command && !shift {
-                    print("Command+R detected - resetting rotation")
                     onResetRotation?()
                     return true
                 }
@@ -989,6 +1024,7 @@ struct KeyEventHandlingView: NSViewRepresentable {
                 }
                 return true
             case 53: // Escape
+                onDismissColorPicker?()
                 onDeselect?()
                 return true
             case 0: // A key
@@ -1016,6 +1052,8 @@ struct KeyEventHandlingView: NSViewRepresentable {
 }
 
 struct GridBackground: View {
+    let backgroundColor: Color
+    
     var body: some View {
         Canvas { context, size in
             let gridSize: CGFloat = 20
@@ -1038,11 +1076,19 @@ struct GridBackground: View {
                 verticalPath.addLine(to: CGPoint(x: x, y: size.height))
             }
             
+            // Determine grid color based on background
+            let gridColor: Color
+            if backgroundColor == Color(hex: "#1b5df7") || backgroundColor == Color(hex: "#f75475") {
+                gridColor = .white.opacity(0.2)
+            } else {
+                gridColor = .gray.opacity(0.2)
+            }
+            
             // Draw all horizontal lines at once
-            context.stroke(horizontalPath, with: .color(.gray.opacity(0.08)), lineWidth: 0.5)
+            context.stroke(horizontalPath, with: .color(gridColor), lineWidth: 0.5)
             
             // Draw all vertical lines at once
-            context.stroke(verticalPath, with: .color(.gray.opacity(0.08)), lineWidth: 0.5)
+            context.stroke(verticalPath, with: .color(gridColor), lineWidth: 0.5)
         }
     }
 }
@@ -1276,12 +1322,12 @@ struct ColorPickerOverlay: View {
     let onCancel: () -> Void
     
     @State private var tempBackgroundColor: Color
+    @State private var showSwatches = false
     
     private let graySwatches: [Color] = [
         Color(hex: "#1e1e1e"), // Darkest
-        Color(hex: "#4a4a4a"),
-        Color(hex: "#7a7a7a"),
-        Color(hex: "#b8b8b8"),
+        Color(hex: "#1b5df7"), // Blue
+        Color(hex: "#f75475"), // Pink
         Color(hex: "#fafafa")  // Lightest
     ]
     
@@ -1307,6 +1353,8 @@ struct ColorPickerOverlay: View {
                                 RoundedRectangle(cornerRadius: 6)
                                     .stroke(tempBackgroundColor == graySwatches[index] ? Color.blue : (index == 0 ? Color.gray.opacity(0.5) : Color.clear), lineWidth: index == 0 ? 1 : 2)
                             )
+                            .scaleEffect(showSwatches ? 1.0 : 0.0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(Double(index) * 0.05), value: showSwatches)
                     }
                     .buttonStyle(.plain)
                 }
@@ -1324,6 +1372,8 @@ struct ColorPickerOverlay: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .scaleEffect(showSwatches ? 1.0 : 0.0)
+                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.25), value: showSwatches)
                 
                 // Cancel button (X)
                 Button(action: {
@@ -1338,10 +1388,15 @@ struct ColorPickerOverlay: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .scaleEffect(showSwatches ? 1.0 : 0.0)
+                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3), value: showSwatches)
             }
         }
         .padding(.top, 20)
         .padding(.leading, 20)
+        .onAppear {
+            showSwatches = true
+        }
     }
 }
 
