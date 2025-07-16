@@ -15,16 +15,18 @@ struct PhotoSticker: Identifiable {
     var position: CGPoint
     var size: CGSize
     var rotation: Double
+    var fileName: String? // <-- Add this line
     
     // Cached image for performance
     var cachedImage: NSImage?
     
-    init(imageData: Data, position: CGPoint = CGPoint(x: 100, y: 100), size: CGSize = CGSize(width: 150, height: 150), rotation: Double = 0) {
+    init(imageData: Data, position: CGPoint = CGPoint(x: 100, y: 100), size: CGSize = CGSize(width: 150, height: 150), rotation: Double = 0, fileName: String? = nil) {
         self.imageData = imageData
         self.position = position
         self.size = size
         self.rotation = rotation
         self.cachedImage = NSImage(data: imageData)
+        self.fileName = fileName // <-- Add this line
     }
     
     // Clear cache when image data changes
@@ -459,227 +461,156 @@ struct ContentView: View {
                                     }
                                 }
                             )
-                            .popover(isPresented: $showStickerList, arrowEdge: .top) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Stickers: \(stickers.count)")
-                                        .font(.headline)
-                                        .padding(.top, 8)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    ScrollView {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            ForEach(Array(stickers.enumerated()), id: \.element.id) { index, sticker in
-                                                HStack(spacing: 8) {
-                                                    if let nsImage = NSImage(data: sticker.imageData) {
-                                                        Image(nsImage: nsImage)
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fit)
-                                                            .frame(width: 32, height: 32)
-                                                            .cornerRadius(4)
-                                                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                                                    }
-                                                    Text("image_\(index)")
-                                                        .font(.subheadline)
-                                                        .foregroundColor(.primary)
-                                                    Spacer()
-                                                    Button(action: {
-                                                        stickers.remove(at: index)
-                                                        if selectedSticker?.id == sticker.id {
-                                                            selectedSticker = nil
-                                                        }
-                                                        updateStickerIndices()
-                                                    }) {
-                                                        Image(systemName: "trash")
-                                                            .foregroundColor(.white)
-                                                            .font(.caption)
-                                                    }
-                                                    .buttonStyle(PlainButtonStyle())
-                                                }
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .contentShape(Rectangle())
-                                                .onTapGesture {
-                                                    selectedSticker = sticker
-                                                    selectedTextSticker = nil
-                                                    showStickerList = false
-                                                }
-                                            }
+                            Spacer(minLength: 0)
+                            // Centered main buttons
+                            HStack(spacing: 6) {
+                                Button(action: {
+                                    isImporting = true
+                                }) {
+                                    Image(systemName: "plus")
+                                        .font(.title3)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color(hex: "#7dbaff"))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .onHover { hovering in
+                                    if hovering {
+                                        addButtonHoverTimer?.invalidate()
+                                        addButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                            showAddTooltip = true
                                         }
-                                        .padding(.vertical, 4)
-                                    }
-                                    .frame(maxHeight: 200)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, 12)
-                                .frame(width: 200, alignment: .leading)
-                                .padding(.leading, -2)
-                            }
-                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.05), value: showToolbarButtons)
-                            
-                            Spacer()
-                            
-                            // Centered buttons
-                            Button(action: {
-                                isImporting = true
-                            }) {
-                                Image(systemName: "plus")
-                                    .font(.title3)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.black)
-                                    .frame(width: 32, height: 32)
-                                    .background(Color(hex: "#7dbaff"))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { hovering in
-                                if hovering {
-                                    // Cancel any existing timer
-                                    addButtonHoverTimer?.invalidate()
-                                    
-                                    // Start a new timer
-                                    addButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
-                                        showAddTooltip = true
-                                    }
-                                } else {
-                                    // Cancel timer and hide tooltip
-                                    addButtonHoverTimer?.invalidate()
-                                    addButtonHoverTimer = nil
-                                    showAddTooltip = false
-                                }
-                            }
-                            .overlay(
-                                Group {
-                                    if showAddTooltip {
-                                        Text("add sticker (⌘A)")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.black.opacity(0.8))
-                                            .cornerRadius(6)
-                                            .fixedSize()
-                                            .offset(y: -40)
-                                            .transition(.opacity)
-                                            .animation(.easeInOut(duration: 0.2), value: showAddTooltip)
+                                    } else {
+                                        addButtonHoverTimer?.invalidate()
+                                        addButtonHoverTimer = nil
+                                        showAddTooltip = false
                                     }
                                 }
-                            )
-                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.10), value: showToolbarButtons)
-                            
-                            Button(action: {
-                                let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
-                                let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
-                                let newTextSticker = TextSticker(
-                                    text: "Text",
-                                    position: CGPoint(x: centerX, y: centerY)
+                                .overlay(
+                                    Group {
+                                        if showAddTooltip {
+                                            Text("add sticker (⌘A)")
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.black.opacity(0.8))
+                                                .cornerRadius(6)
+                                                .fixedSize()
+                                                .offset(y: -40)
+                                                .transition(.opacity)
+                                                .animation(.easeInOut(duration: 0.2), value: showAddTooltip)
+                                        }
+                                    }
                                 )
-                                textStickers.append(newTextSticker)
-                                updateTextStickerIndices()
-                                selectedTextSticker = newTextSticker
-                                selectedSticker = nil
-                            }) {
-                                Image(systemName: "character.cursor.ibeam")
-                                    .font(.title3)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.black)
-                                    .frame(width: 32, height: 32)
-                                    .background(Color(hex: "#4ef594"))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { hovering in
-                                if hovering {
-                                    // Cancel any existing timer
-                                    addTextButtonHoverTimer?.invalidate()
-                                    
-                                    // Start a new timer
-                                    addTextButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
-                                        showAddTextTooltip = true
-                                    }
-                                } else {
-                                    // Cancel timer and hide tooltip
-                                    addTextButtonHoverTimer?.invalidate()
-                                    addTextButtonHoverTimer = nil
-                                    showAddTextTooltip = false
-                                }
-                            }
-                            .overlay(
-                                Group {
-                                    if showAddTextTooltip {
-                                        Text("add text (⌘T)")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.black.opacity(0.8))
-                                            .cornerRadius(6)
-                                            .fixedSize()
-                                            .offset(y: -40)
-                                            .transition(.opacity)
-                                            .animation(.easeInOut(duration: 0.2), value: showAddTextTooltip)
-                                    }
-                                }
-                            )
-                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.15), value: showToolbarButtons)
-                            
-                            Button(action: {
-                                if let selected = selectedSticker {
-                                    stickers.removeAll { $0.id == selected.id }
+                                .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.10), value: showToolbarButtons)
+                                Button(action: {
+                                    let centerX = viewSize.width > 0 ? viewSize.width / 2 : 400
+                                    let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
+                                    let newTextSticker = TextSticker(
+                                        text: "Text",
+                                        position: CGPoint(x: centerX, y: centerY)
+                                    )
+                                    textStickers.append(newTextSticker)
+                                    updateTextStickerIndices()
+                                    selectedTextSticker = newTextSticker
                                     selectedSticker = nil
-                                } else if let selected = selectedTextSticker {
-                                    textStickers.removeAll { $0.id == selected.id }
-                                    selectedTextSticker = nil
+                                }) {
+                                    Image(systemName: "character.cursor.ibeam")
+                                        .font(.title3)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.black)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color(hex: "#4ef594"))
+                                        .clipShape(Circle())
                                 }
-                            }) {
-                                Image(systemName: "delete.left")
-                                    .font(.title3)
-                                    .fontWeight(.medium)
-                                    .foregroundColor((selectedSticker == nil && selectedTextSticker == nil) ? .gray : .red)
-                                    .frame(width: 32, height: 32)
-                                    .background((selectedSticker == nil && selectedTextSticker == nil) ? Color.gray.opacity(0.2) : Color.white)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(selectedSticker == nil && selectedTextSticker == nil)
-                            .onHover { hovering in
-                                if hovering {
-                                    // Cancel any existing timer
-                                    deleteButtonHoverTimer?.invalidate()
-                                    
-                                    // Start a new timer
-                                    deleteButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
-                                        showDeleteTooltip = true
-                                    }
-                                } else {
-                                    // Cancel timer and hide tooltip
-                                    deleteButtonHoverTimer?.invalidate()
-                                    deleteButtonHoverTimer = nil
-                                    showDeleteTooltip = false
-                                }
-                            }
-                            .overlay(
-                                Group {
-                                    if showDeleteTooltip {
-                                        Text("delete (⌫)")
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.black.opacity(0.8))
-                                            .cornerRadius(6)
-                                            .fixedSize()
-                                            .offset(y: -40)
-                                            .transition(.opacity)
-                                            .animation(.easeInOut(duration: 0.2), value: showDeleteTooltip)
+                                .buttonStyle(.plain)
+                                .onHover { hovering in
+                                    if hovering {
+                                        addTextButtonHoverTimer?.invalidate()
+                                        addTextButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                            showAddTextTooltip = true
+                                        }
+                                    } else {
+                                        addTextButtonHoverTimer?.invalidate()
+                                        addTextButtonHoverTimer = nil
+                                        showAddTextTooltip = false
                                     }
                                 }
-                            )
-                            .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.20), value: showToolbarButtons)
-                            
-                            Spacer()
-                            
+                                .overlay(
+                                    Group {
+                                        if showAddTextTooltip {
+                                            Text("add text (⌘T)")
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.black.opacity(0.8))
+                                                .cornerRadius(6)
+                                                .fixedSize()
+                                                .offset(y: -40)
+                                                .transition(.opacity)
+                                                .animation(.easeInOut(duration: 0.2), value: showAddTextTooltip)
+                                        }
+                                    }
+                                )
+                                .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.15), value: showToolbarButtons)
+                                Button(action: {
+                                    if let selected = selectedSticker {
+                                        stickers.removeAll { $0.id == selected.id }
+                                        selectedSticker = nil
+                                    } else if let selected = selectedTextSticker {
+                                        textStickers.removeAll { $0.id == selected.id }
+                                        selectedTextSticker = nil
+                                    }
+                                }) {
+                                    Image(systemName: "delete.left")
+                                        .font(.title3)
+                                        .fontWeight(.medium)
+                                        .foregroundColor((selectedSticker == nil && selectedTextSticker == nil) ? .gray : .red)
+                                        .frame(width: 32, height: 32)
+                                        .background((selectedSticker == nil && selectedTextSticker == nil) ? Color.gray.opacity(0.2) : Color.white)
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(selectedSticker == nil && selectedTextSticker == nil)
+                                .onHover { hovering in
+                                    if hovering {
+                                        deleteButtonHoverTimer?.invalidate()
+                                        deleteButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                                            showDeleteTooltip = true
+                                        }
+                                    } else {
+                                        deleteButtonHoverTimer?.invalidate()
+                                        deleteButtonHoverTimer = nil
+                                        showDeleteTooltip = false
+                                    }
+                                }
+                                .overlay(
+                                    Group {
+                                        if showDeleteTooltip {
+                                            Text("delete (⌫)")
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.black.opacity(0.8))
+                                                .cornerRadius(6)
+                                                .fixedSize()
+                                                .offset(y: -40)
+                                                .transition(.opacity)
+                                                .animation(.easeInOut(duration: 0.2), value: showDeleteTooltip)
+                                        }
+                                    }
+                                )
+                                .scaleEffect(showToolbarButtons ? 1.0 : 0.0)
+                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.20), value: showToolbarButtons)
+                            }
+                            Spacer(minLength: 0)
                             // Clear all button on the right
                             Button(action: {
                                 stickers.removeAll()
@@ -698,15 +629,11 @@ struct ContentView: View {
                             .disabled(stickers.isEmpty && textStickers.isEmpty)
                             .onHover { hovering in
                                 if hovering {
-                                    // Cancel any existing timer
                                     clearAllButtonHoverTimer?.invalidate()
-                                    
-                                    // Start a new timer
                                     clearAllButtonHoverTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
                                         showClearAllTooltip = true
                                     }
                                 } else {
-                                    // Cancel timer and hide tooltip
                                     clearAllButtonHoverTimer?.invalidate()
                                     clearAllButtonHoverTimer = nil
                                     showClearAllTooltip = false
@@ -760,6 +687,88 @@ struct ContentView: View {
                     }
                 }
             }
+            // Sticker List Overlay (now a sibling to the toolbar)
+            if showStickerList {
+                GeometryReader { geo in
+                    ZStack {
+                        Color.black.opacity(0.001)
+                            .ignoresSafeArea()
+                            .onTapGesture { showStickerList = false }
+                        let buttonX: CGFloat = 20 + 16
+                        GeometryReader { popupGeo in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text("\(stickers.count) STICKER\(stickers.count == 1 ? "" : "S")")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.top, 20)
+                                    .padding(.leading, 20)
+                                    .fixedSize()
+                                if stickers.isEmpty {
+                                    Spacer().frame(height: 24)
+                                    Text("No stickers yet")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.gray)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.vertical, 24)
+                                } else {
+                                    VStack(spacing: 0) {
+                                        ForEach(Array(stickers.enumerated()), id: \.element.id) { index, sticker in
+                                            HStack(spacing: 12) {
+                                                if let nsImage = NSImage(data: sticker.imageData) {
+                                                    Image(nsImage: nsImage)
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill)
+                                                        .frame(width: 40, height: 40)
+                                                        .background(Color(hex: "#2e2e2e"))
+                                                        .cornerRadius(4)
+                                                } else {
+                                                    Rectangle()
+                                                        .fill(Color(hex: "#2e2e2e"))
+                                                        .frame(width: 40, height: 40)
+                                                        .cornerRadius(4)
+                                                }
+                                                Text(sticker.fileName ?? "Unknown")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.white)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
+                                                Button(action: {
+                                                    stickers.remove(at: index)
+                                                    if selectedSticker?.id == sticker.id {
+                                                        selectedSticker = nil
+                                                    }
+                                                    updateStickerIndices()
+                                                }) {
+                                                    Image(systemName: "trash")
+                                                        .foregroundColor(.white)
+                                                        .font(.system(size: 16))
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                            }
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .frame(maxWidth: 340)
+                                            .background(Color.clear)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                selectedSticker = sticker
+                                                selectedTextSticker = nil
+                                                showStickerList = false
+                                            }
+                                        }
+                                    }
+                                    .padding(.vertical, 16)
+                                }
+                            }
+                            .background(Color(hex: "#333333"))
+                            .cornerRadius(20)
+                            .frame(width: 300, alignment: .leading)
+                            .position(x: buttonX + 300/2, y: geo.size.height - 140 - 20 + 10 - (stickers.count > 1 ? CGFloat(stickers.count - 1) * 30 : 0))
+                        }
+                    }
+                }
+            }
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -782,7 +791,8 @@ struct ContentView: View {
                         let centerY = viewSize.height > 0 ? viewSize.height / 2 : 300
                         let newSticker = PhotoSticker(
                             imageData: imageData,
-                            position: CGPoint(x: centerX, y: centerY)
+                            position: CGPoint(x: centerX, y: centerY),
+                            fileName: url.lastPathComponent // <-- Set fileName from URL
                         )
                         stickers.append(newSticker)
                         updateStickerIndices()
@@ -1199,36 +1209,13 @@ struct PhotoStickerView: View {
                             .stroke(Color.white, lineWidth: 4)
                     )
             }
-            // Scroll wheel rotation and reset button (when selected)
+            // Scroll wheel rotation area (when selected)
             if isSelected {
-                ZStack {
-                    // Scroll wheel rotation area
-                    ScrollWheelRotationView(
-                        onRotate: onRotate,
-                        currentRotation: sticker.rotation
-                    )
-                    .frame(width: sticker.size.width + 40, height: sticker.size.height + 40)
-                    
-                    // Reset rotation button (top-left corner)
-                    VStack {
-                        HStack {
-                            Button(action: {
-                                onRotate(0)
-                            }) {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(width: 20, height: 20)
-                                    .background(Color.orange)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            Spacer()
-                        }
-                        Spacer()
-                    }
-                    .frame(width: sticker.size.width + 40, height: sticker.size.height + 40)
-                }
+                ScrollWheelRotationView(
+                    onRotate: onRotate,
+                    currentRotation: sticker.rotation
+                )
+                .frame(width: sticker.size.width + 40, height: sticker.size.height + 40)
                 .offset(x: -20, y: -20)
             }
         }
@@ -1547,35 +1534,12 @@ struct TextStickerView: View {
                 )
                 .offset(x: textSticker.cachedTextSize.width / 2 + 12, y: 0)
                 
-                // Scroll wheel rotation and reset button (when selected)
-                ZStack {
-                    // Scroll wheel rotation area
-                    ScrollWheelRotationView(
-                        onRotate: onRotate,
-                        currentRotation: textSticker.rotation
-                    )
-                    .frame(width: textSticker.cachedTextSize.width + 40, height: textSticker.cachedTextSize.height + 40)
-                    
-                    // Reset rotation button (top-left corner)
-                    VStack {
-                        HStack {
-                            Button(action: {
-                                onRotate(0)
-                            }) {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(width: 20, height: 20)
-                                    .background(Color.orange)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            Spacer()
-                        }
-                        Spacer()
-                    }
-                    .frame(width: textSticker.cachedTextSize.width + 40, height: textSticker.cachedTextSize.height + 40)
-                }
+                // Scroll wheel rotation area (when selected)
+                ScrollWheelRotationView(
+                    onRotate: onRotate,
+                    currentRotation: textSticker.rotation
+                )
+                .frame(width: textSticker.cachedTextSize.width + 40, height: textSticker.cachedTextSize.height + 40)
                 .offset(x: -20, y: -20)
             }
         }
